@@ -1,9 +1,9 @@
 
 #include <iostream>
-#include <vector>
-#include <algorithm>
 #include <fstream>
 #include <string>
+#include <vector>
+#include <algorithm>
 
 #include <boost/filesystem.hpp>
 #include <opencv2/opencv.hpp>
@@ -99,13 +99,13 @@ int main(int argc, char **argv) {
 
   std::sort(image_names.begin(), image_names.end());
 
-  int downsample_rate = DOWNSAMPLE_RATE;
+  size_t downsample_rate = DOWNSAMPLE_RATE;
   std::string time_window_begin = TIME_WINDOW_BEGIN;
   std::string time_window_end = TIME_WINDOW_END;
 
   std::vector<CameraData> camera_observation_data;   // image and timestep
 
-  int counter = 0;
+  size_t counter = 0;
   for (auto& image_names_iter: image_names) {	
   
     if (counter % downsample_rate == 0) {            // downsample images for testing
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
     counter++;
   }
 
-  int num_of_observations = camera_observation_data.size();
+  size_t num_of_observations = camera_observation_data.size();
 
 
   /*** Step 2. Extracting features ***/
@@ -148,18 +148,17 @@ int main(int argc, char **argv) {
   std::vector<std::vector<cv::KeyPoint>> image_keypoints(num_of_observations);
   std::vector<cv::Mat> image_descriptions(num_of_observations);
 
-  for (int i=0; i<num_of_observations; i++) {	
+  for (size_t i=0; i<num_of_observations; i++) {	
 
     brisk_detector->detect(camera_observation_data.at(i).getImage(), image_keypoints.at(i));
 
-    // orb_detector->detect(camera_observation_data.at(i).getImage(), keypoints);
+    // orb_detector->detect(camera_observation_data.at(i).getImage(), image_keypoints.at(i));
     // cv::drawKeypoints( , );
 
     brisk_extractor->compute(camera_observation_data.at(i).getImage(), 
       image_keypoints.at(i), 
       image_descriptions.at(i));
   }
-
 
   /*** Step 3. Matching features ***/
 
@@ -170,13 +169,13 @@ int main(int argc, char **argv) {
   std::vector<std::vector<cv::DMatch>> image_matches(num_of_observations-1);
   std::vector<std::vector<cv::DMatch>> image_good_matches(num_of_observations-1);
 
-  for (int i=0; i<num_of_observations-1; i++) {	
+  for (size_t i=0; i<num_of_observations-1; i++) {
 
     matcher->match(image_descriptions.at(i), image_descriptions.at(i+1), image_matches.at(i));
 
     cv::Mat img_w_matches;
-    for (int k=0; k<image_matches.at(i).size(); k++) {
-      if (image_matches.at(i)[k].distance < 60) {
+    for (size_t k=0; k<image_matches.at(i).size(); k++) {
+      if (image_matches.at(i)[k].distance < 60) {   // 60
         image_good_matches.at(i).push_back(image_matches.at(i)[k]);
       }
     }
@@ -196,17 +195,17 @@ int main(int argc, char **argv) {
   output_file.open ("observation.txt");
   output_file << "timestamp [ns], landmark id, u [pixel], v [pixel]\n";
 
-  std::map<CVKeypoint, int> pre_landmark_lookup_table;
-  std::map<CVKeypoint, int> next_landmark_lookup_table;
+  std::map<CVKeypoint, size_t> pre_landmark_lookup_table;       // keypoint and landmark id
+  std::map<CVKeypoint, size_t> next_landmark_lookup_table;
 
-  int landmakr_id_count = 0;
-  int landmark_id = 0;
+  size_t landmakr_id_count = 0;
+  size_t landmark_id = 0;
 
-  for (int i=0; i<image_good_matches.size(); i++) {
-    for (int m=0; m<image_good_matches.at(i).size(); m++) {
+  for (size_t i=0; i<image_good_matches.size(); i++) {
+    for (size_t m=0; m<image_good_matches.at(i).size(); m++) {
       
-      int pre_keypoint_id = image_good_matches.at(i)[m].queryIdx;
-      int next_keypoint_id = image_good_matches.at(i)[m].trainIdx;
+      size_t pre_keypoint_id = image_good_matches.at(i)[m].queryIdx;
+      size_t next_keypoint_id = image_good_matches.at(i)[m].trainIdx;
 
       CVKeypoint pre_keypoint = CVKeypoint(image_keypoints.at(i)[pre_keypoint_id]);
       CVKeypoint next_keypoint = CVKeypoint(image_keypoints.at(i+1)[next_keypoint_id]);
@@ -216,7 +215,7 @@ int main(int argc, char **argv) {
 
         landmark_id = landmakr_id_count;
 
-        pre_landmark_lookup_table.insert(std::pair<CVKeypoint, int>(pre_keypoint, landmark_id));
+        pre_landmark_lookup_table.insert(std::pair<CVKeypoint, size_t>(pre_keypoint, landmark_id));
         ++landmakr_id_count;
       }
       else {
@@ -228,7 +227,7 @@ int main(int argc, char **argv) {
                               + std::to_string(pre_keypoint.getU()) + ", " + std::to_string(pre_keypoint.getV()) + "\n";
     output_file << output_str;
 
-      next_landmark_lookup_table.insert(std::pair<CVKeypoint, int>(next_keypoint, landmark_id));
+      next_landmark_lookup_table.insert(std::pair<CVKeypoint, size_t>(next_keypoint, landmark_id));
     }
 
     std::swap(pre_landmark_lookup_table, next_landmark_lookup_table);
