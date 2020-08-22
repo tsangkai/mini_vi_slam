@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
     counter++;
   }
 
-  size_t num_of_observations = camera_observation_data.size();
+  size_t num_of_cam_observations = camera_observation_data.size();
 
 
   /*** Step 2. Extracting features ***/
@@ -145,10 +145,10 @@ int main(int argc, char **argv) {
   // you can try to use ORB feature as well
   // std::shared_ptr<cv::FeatureDetector> orb_detector = cv::ORB::create();
 
-  std::vector<std::vector<cv::KeyPoint>> image_keypoints(num_of_observations);
-  std::vector<cv::Mat> image_descriptions(num_of_observations);
+  std::vector<std::vector<cv::KeyPoint>> image_keypoints(num_of_cam_observations);
+  std::vector<cv::Mat> image_descriptions(num_of_cam_observations);
 
-  for (size_t i=0; i<num_of_observations; i++) {	
+  for (size_t i=0; i<num_of_cam_observations; i++) {	
 
     brisk_detector->detect(camera_observation_data.at(i).getImage(), image_keypoints.at(i));
 
@@ -166,10 +166,10 @@ int main(int argc, char **argv) {
     std::shared_ptr<cv::DescriptorMatcher>(
       new cv::BFMatcher(cv::NORM_HAMMING));   // normType goes with the descriptor, BRISK should use NORM_HAMMING
 
-  std::vector<std::vector<cv::DMatch>> image_matches(num_of_observations-1);
-  std::vector<std::vector<cv::DMatch>> image_good_matches(num_of_observations-1);
+  std::vector<std::vector<cv::DMatch>> image_matches(num_of_cam_observations-1);
+  std::vector<std::vector<cv::DMatch>> image_good_matches(num_of_cam_observations-1);
 
-  for (size_t i=0; i<num_of_observations-1; i++) {
+  for (size_t i=0; i<num_of_cam_observations-1; i++) {
 
     matcher->match(image_descriptions.at(i), image_descriptions.at(i+1), image_matches.at(i));
 
@@ -189,14 +189,12 @@ int main(int argc, char **argv) {
   }
 
 
-  /*** Step 4. Output observation ***/
-
-  std::ofstream output_file;
-  output_file.open ("observation.txt");
-  output_file << "timestamp [ns], landmark id, u [pixel], v [pixel]\n";
+  /*** Step 4. Obtain feature observation ***/
 
   std::map<CVKeypoint, size_t> pre_landmark_lookup_table;       // keypoint and landmark id
   std::map<CVKeypoint, size_t> next_landmark_lookup_table;
+
+  std::vector<std::string> output_feature_observation;
 
   size_t landmakr_id_count = 0;
   size_t landmark_id = 0;
@@ -223,9 +221,11 @@ int main(int argc, char **argv) {
       }      	
 
     // output
-    std::string output_str = camera_observation_data.at(i).getTime() + ", " + std::to_string(landmark_id+1) + ", "
-                              + std::to_string(pre_keypoint.getU()) + ", " + std::to_string(pre_keypoint.getV()) + "\n";
-    output_file << output_str;
+    // timestamp [ns], landmark id, u [pixel], v [pixel]
+    std::string output_str = camera_observation_data.at(i).getTime() + "," + std::to_string(landmark_id+1) + ","
+                              + std::to_string(pre_keypoint.getU()) + "," + std::to_string(pre_keypoint.getV()) + "\n";
+    output_feature_observation.push_back(output_str);
+    // output_file << output_str;
 
       next_landmark_lookup_table.insert(std::pair<CVKeypoint, size_t>(next_keypoint, landmark_id));
     }
@@ -234,6 +234,18 @@ int main(int argc, char **argv) {
     next_landmark_lookup_table.clear();
   }
 
+
+  /*** Step 5. Output observation ***/
+
+  std::ofstream output_file;
+  output_file.open ("feature_observation.txt");
+  output_file << std::to_string(num_of_cam_observations) + "," + std::to_string(landmakr_id_count) + "," + std::to_string(output_feature_observation.size()) + "\n";
+  
+  for (auto& output_str: output_feature_observation) { 
+    // timestamp [ns], landmark id, u [pixel], v [pixel]
+    output_file << output_str;
+  }
+  
   output_file.close();
 
   std::getchar();
