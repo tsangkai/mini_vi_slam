@@ -1,0 +1,7 @@
+%YAML:1.0
+
+time_window: ["1403636649313555456", "1403636658963555584"]
+
+frontend:
+  downsample_rate: 10
+

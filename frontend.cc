@@ -7,7 +7,7 @@
 
 #include <boost/filesystem.hpp>
 #include <opencv2/opencv.hpp>
-#include <opencv2/core.hpp>
+#include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/features2d.hpp>
 #include <opencv2/calib3d.hpp>
@@ -15,12 +15,7 @@
 #include <brisk/brisk.h>
 
 
-// parameters
-// the following parameters allow us to start with small-scope project
-#define DOWNSAMPLE_RATE    10
-#define TIME_WINDOW_BEGIN  "1403636649313555456"
-#define TIME_WINDOW_END    "1403636658963555584"
-
+// local configuration parameter setting
 #define BRISK_DETECTION_THRESHOLD             50.0
 #define BRISK_DETECTION_OCTAVES               0
 #define BRISK_DETECTION_ABSOLUTE_THRESHOLD    800.0
@@ -77,7 +72,20 @@ class CVKeypoint {
 
 int main(int argc, char **argv) {
 
-  /*** Step 1. Reading image files ***/
+  /*** Step 0. Read configuration file ***/
+
+  // for yaml file
+  std::string config_file_path("../config/test.yaml");
+  cv::FileStorage config_file(config_file_path, cv::FileStorage::READ);
+
+  std::string time_window_begin(config_file["time_window"][0]);
+  std::string time_window_end(config_file["time_window"][1]);
+
+  size_t downsample_rate = (size_t)(int)(config_file["frontend"]["downsample_rate"]);
+
+  std::cout << "Consider from " << time_window_begin << " to " << time_window_end << ": " << std::endl;
+
+  /*** Step 1. Read image files ***/
 
   // the folder path
   // std::string path(argv[1]);
@@ -99,9 +107,7 @@ int main(int argc, char **argv) {
 
   std::sort(image_names.begin(), image_names.end());
 
-  size_t downsample_rate = DOWNSAMPLE_RATE;
-  std::string time_window_begin = TIME_WINDOW_BEGIN;
-  std::string time_window_end = TIME_WINDOW_END;
+  // size_t downsample_rate = DOWNSAMPLE_RATE;
 
   std::vector<CameraData> camera_observation_data;   // image and timestep
 
@@ -126,7 +132,7 @@ int main(int argc, char **argv) {
   size_t num_of_cam_observations = camera_observation_data.size();
 
 
-  /*** Step 2. Extracting features ***/
+  /*** Step 2. Extract features ***/
 
   std::shared_ptr<cv::FeatureDetector> brisk_detector = 
     std::shared_ptr<cv::FeatureDetector>(
@@ -160,7 +166,7 @@ int main(int argc, char **argv) {
       image_descriptions.at(i));
   }
 
-  /*** Step 3. Matching features ***/
+  /*** Step 3. Match features ***/
 
   std::shared_ptr<cv::DescriptorMatcher> matcher = 
     std::shared_ptr<cv::DescriptorMatcher>(
@@ -238,7 +244,7 @@ int main(int argc, char **argv) {
   /*** Step 5. Output observation ***/
 
   std::ofstream output_file;
-  output_file.open ("feature_observation.txt");
+  output_file.open ("feature_observation.csv");
   output_file << std::to_string(num_of_cam_observations) + "," + std::to_string(landmakr_id_count) + "," + std::to_string(output_feature_observation.size()) + "\n";
   
   for (auto& output_str: output_feature_observation) { 
