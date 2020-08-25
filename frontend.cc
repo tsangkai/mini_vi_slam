@@ -13,8 +13,6 @@
 #include <opencv2/calib3d.hpp>
 
 
-
-
 class CameraData {
  public:
   CameraData(std::string timeStampStr, std::string dataFilePath) {
@@ -126,6 +124,7 @@ int main(int argc, char **argv) {
   std::shared_ptr<cv::FeatureDetector> brisk_detector =
     cv::BRISK::create(60, 0, 1.0f);
 
+
   // you can try to use ORB feature as well
   // std::shared_ptr<cv::FeatureDetector> orb_detector = cv::ORB::create();
 
@@ -219,7 +218,7 @@ int main(int argc, char **argv) {
 
   std::ofstream output_file;
   output_file.open ("feature_observation.csv");
-  output_file << std::to_string(num_of_cam_observations) + "," + std::to_string(landmakr_id_count) + "," + std::to_string(output_feature_observation.size()) + "\n";
+  output_file << "timestamp [ns], landmark id, u [pixel], v [pixel]\n";
   
   for (auto& output_str: output_feature_observation) { 
     // timestamp [ns], landmark id, u [pixel], v [pixel]
