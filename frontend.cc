@@ -12,17 +12,6 @@
 #include <opencv2/features2d.hpp>
 #include <opencv2/calib3d.hpp>
 
-#include <brisk/brisk.h>
-
-
-// local configuration parameter setting
-#define BRISK_DETECTION_THRESHOLD             50.0
-#define BRISK_DETECTION_OCTAVES               0
-#define BRISK_DETECTION_ABSOLUTE_THRESHOLD    800.0
-#define BRISK_DETECTION_MAX_KEYPOINTS         450
-
-#define BRISK_DESCRIPTION_ROTATION_INVARIANCE true
-#define BRISK_DESCRIPTION_SCALE_INVARIANCE    false
 
 
 
@@ -134,19 +123,8 @@ int main(int argc, char **argv) {
 
   /*** Step 2. Extract features ***/
 
-  std::shared_ptr<cv::FeatureDetector> brisk_detector = 
-    std::shared_ptr<cv::FeatureDetector>(
-      new brisk::ScaleSpaceFeatureDetector<brisk::HarrisScoreCalculator>(
-        BRISK_DETECTION_THRESHOLD, 
-        BRISK_DETECTION_OCTAVES, 
-        BRISK_DETECTION_ABSOLUTE_THRESHOLD, 
-        BRISK_DETECTION_MAX_KEYPOINTS));
-
-  std::shared_ptr<cv::FeatureDetector> brisk_extractor = 
-    std::shared_ptr<cv::DescriptorExtractor>(
-      new brisk::BriskDescriptorExtractor(
-        BRISK_DESCRIPTION_ROTATION_INVARIANCE,
-        BRISK_DESCRIPTION_SCALE_INVARIANCE));
+  std::shared_ptr<cv::FeatureDetector> brisk_detector =
+    cv::BRISK::create(60, 0, 1.0f);
 
   // you can try to use ORB feature as well
   // std::shared_ptr<cv::FeatureDetector> orb_detector = cv::ORB::create();
@@ -158,10 +136,7 @@ int main(int argc, char **argv) {
 
     brisk_detector->detect(camera_observation_data.at(i).getImage(), image_keypoints.at(i));
 
-    // orb_detector->detect(camera_observation_data.at(i).getImage(), image_keypoints.at(i));
-    // cv::drawKeypoints( , );
-
-    brisk_extractor->compute(camera_observation_data.at(i).getImage(), 
+    brisk_detector->compute(camera_observation_data.at(i).getImage(), 
       image_keypoints.at(i), 
       image_descriptions.at(i));
   }
@@ -169,8 +144,7 @@ int main(int argc, char **argv) {
   /*** Step 3. Match features ***/
 
   std::shared_ptr<cv::DescriptorMatcher> matcher = 
-    std::shared_ptr<cv::DescriptorMatcher>(
-      new cv::BFMatcher(cv::NORM_HAMMING));   // normType goes with the descriptor, BRISK should use NORM_HAMMING
+    cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE_HAMMING);
 
   std::vector<std::vector<cv::DMatch>> image_matches(num_of_cam_observations-1);
   std::vector<std::vector<cv::DMatch>> image_good_matches(num_of_cam_observations-1);
