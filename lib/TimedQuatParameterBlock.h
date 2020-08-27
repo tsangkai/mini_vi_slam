@@ -83,7 +83,12 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   // setters
   /// @brief Set estimate of this parameter block.
   /// @param[in] T_WS The estimate to set this to.
-  virtual void setEstimate(const Eigen::Quaterniond& quat);
+  void setEstimate(const Eigen::Quaterniond& quat) {
+      parameters_[0] = quat.w();
+      parameters_[1] = quat.x();
+      parameters_[2] = quat.y();
+      parameters_[3] = quat.z();
+  }
 
 
   /// @param[in] timestamp The timestamp of this state.
@@ -92,7 +97,9 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   // getters
   /// @brief Get estimate.
   /// \return The estimate.
-  virtual Eigen::Quaterniond estimate() const;
+  Eigen::Quaterniond estimate() const {
+    return Eigen::Quaterniond(parameters_[0], parameters_[1], parameters_[2], parameters_[3]);
+  }
 
   /// \brief Get the time.
   /// \return The timestamp of this state.

@@ -79,8 +79,8 @@ class BALProblem {
       return false;
     };
 
-    FscanfOrDie(fptr, "%d", &num_poses_);  // states
-    FscanfOrDie(fptr, "%d", &num_landmarks_);   // landmarks
+    FscanfOrDie(fptr, "%d", &num_poses_);        // poses
+    FscanfOrDie(fptr, "%d", &num_landmarks_);    // landmarks
     FscanfOrDie(fptr, "%d", &num_observations_);
 
     landmark_index_ = new int[num_observations_];
@@ -137,14 +137,14 @@ struct SnavelyReprojectionError {
       : observed_x(observed_x), observed_y(observed_y) {}
 
   template <typename T>
-  bool operator()(const T* const rotation,
+  bool operator()(const T* const quat,
                   const T* const translation,
                   const T* const camera,
                   const T* const point,
                   T* residuals) const {
     // camera[0,1,2] are the angle-axis rotation.
     T p[3];
-    ceres::AngleAxisRotatePoint(rotation, point, p);
+    ceres::QuaternionRotatePoint(quat, point, p);
 
     // camera[3,4,5] are the translation.
     p[0] += translation[0];
@@ -179,7 +179,7 @@ struct SnavelyReprojectionError {
   // the client code.
   static ceres::CostFunction* Create(const double observed_x,
                                      const double observed_y) {
-    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 3, 3, 3, 3>(
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 4, 3, 3, 3>(
                 new SnavelyReprojectionError(observed_x, observed_y)));
   }
 
@@ -203,25 +203,34 @@ int main(int argc, char** argv) {
 
 
   /*** Parameters to be estimated ***/
-
-  double* rotation_parameter_ptr = new double[3*bal_problem.num_poses()];    // TODO: Use defined ParameterBlock
+  std::vector<TimedQuatParameterBlock> rotation_parameter;
   std::vector<Timed3dParameterBlock> translation_parameter;
-  double* camera_parameter_ptr = new double[3*bal_problem.num_poses()];
+  std::vector<double*> camera_parameter_ptr;
+  std::vector<LandmarkParameterBlock> landmark_parameter;
 
 
   for (int i=0; i < bal_problem.num_poses(); ++i) {
     double* parameter_ptr = bal_problem.getParamterPtr() + 9*i;
 
+    // rotation
+    double quat_arr[4];
+    ceres::AngleAxisToQuaternion(parameter_ptr, quat_arr);
+    Eigen::Quaterniond rotation_init(quat_arr[0], quat_arr[1], quat_arr[2], quat_arr[4]);
+    rotation_parameter.push_back(TimedQuatParameterBlock(rotation_init, i, i));
+
+    // translation
     Eigen::Vector3d translation_init(parameter_ptr[3], parameter_ptr[4], parameter_ptr[5]);
     translation_parameter.push_back(Timed3dParameterBlock(translation_init, i, i));
 
+    // camera extrinsic parameter
+    double camera_ext_init[3];
+
     for (int j=0; j < 3; ++j) {
-       rotation_parameter_ptr[3*i+j] = parameter_ptr[j];
-       camera_parameter_ptr[3*i+j] = parameter_ptr[6+j];
+       camera_ext_init[j] = parameter_ptr[6+j];
     }
+    camera_parameter_ptr.push_back(camera_ext_init);
   }
 
-  std::vector<LandmarkParameterBlock> landmark_parameter;
 
   for (int i=0; i < bal_problem.num_landmarks(); ++i) {
     double* landmark_ptr = bal_problem.getParamterPtr() + 9 * bal_problem.num_poses() + 3*i;
@@ -251,9 +260,9 @@ int main(int argc, char** argv) {
     int landmark_id = bal_problem.landmark_id_for_observation(i);
     problem.AddResidualBlock(cost_function,
                              NULL /* squared loss */,
-                             rotation_parameter_ptr + 3*pose_id,
+                             rotation_parameter.at(pose_id).parameters(),
                              translation_parameter.at(pose_id).parameters(),
-                             camera_parameter_ptr + 3*pose_id,
+                             camera_parameter_ptr.at(pose_id), 
                              landmark_parameter.at(landmark_id).parameters());
   }
 
