@@ -57,7 +57,7 @@
 /// @tparam MinDim  Minimal dimension of parameter block
 /// @tparam T       The type of the estimate
 template<int Dim, int MinDim, class T>
-class ParameterBlockSized : public ParameterBlock {
+class SizedParameterBlock : public ParameterBlock {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   // OKVIS_DEFINE_EXCEPTION(Exception,std::runtime_error)
@@ -72,13 +72,13 @@ class ParameterBlockSized : public ParameterBlock {
   typedef T parameter_t;
 
   /// \brief Default constructor -- initialises elements in parametes_ to zero.
-  ParameterBlockSized() {
+  SizedParameterBlock() {
     for (int i = 0; i < Dimension; ++i)
       parameters_[i] = 0;
   }
 
   /// \brief Trivial destructor.
-  virtual ~ParameterBlockSized() {
+  virtual ~SizedParameterBlock() {
   }
 
   /// @name Setters

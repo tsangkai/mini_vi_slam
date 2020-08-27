@@ -49,17 +49,17 @@
 /// \brief ceres Namespace for ceres-related functionality implemented in okvis.
 // namespace ceres {
 
-class LandmarkParameterBlock: public ParameterBlockSized<3, 3, Eigen::Vector3d> {
+class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
  public:
 
   /// \brief The estimate type (3D vector).
   typedef Eigen::Vector3d estimate_t;
 
   /// \brief The base class type.
-  typedef ParameterBlockSized<3, 3, estimate_t> base_t;
+  typedef SizedParameterBlock<3, 3, estimate_t> base_t;
 
   /// \brief Default constructor (assumes not fixed).
-  LandmarkParameterBlock(): base_t::ParameterBlockSized(),
+  LandmarkParameterBlock(): base_t::SizedParameterBlock(),
     initialized_(false) {
     setFixed(false);
   }

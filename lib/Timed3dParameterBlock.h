@@ -48,18 +48,18 @@
 // namespace ceres{
 
 /// \brief Wraps the parameter block for a pose estimate
-class Timed3dParameterBlock : public ParameterBlockSized<3, 3, Eigen::Vector3d> {
+class Timed3dParameterBlock : public SizedParameterBlock<3, 3, Eigen::Vector3d> {
  public:
 
   /// \brief The estimate type (3D vector).
   typedef Eigen::Vector3d estimate_t;
 
   /// \brief The base class type.
-  typedef ParameterBlockSized<3, 3, estimate_t> base_t;
+  typedef SizedParameterBlock<3, 3, estimate_t> base_t;
 
   /// \brief Default constructor (assumes not fixed).
   Timed3dParameterBlock(): 
-    base_t::ParameterBlockSized() {
+    base_t::SizedParameterBlock() {
       setFixed(false);
   }
 

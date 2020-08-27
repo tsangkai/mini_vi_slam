@@ -46,9 +46,11 @@
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
+#include "SizedParameterBlock.h"
 #include "LandmarkParameterBlock.h"
 #include "Timed3dParameterBlock.h"
 #include "TimedQuatParameterBlock.h"
+
 
 
 
@@ -62,26 +64,14 @@ class BALProblem {
     delete[] parameters_;
   }
 
-  int num_observations()       const { return num_observations_;               }
-  int num_landmarks()          const { return num_landmarks_;                  }
-  int num_poses()              const { return num_poses_;                      }
-  const double* observations() const { return observations_;                   }
-  double* getParamterPtr()          { return parameters_;                     }
-  double* mutable_landmarks()        { return parameters_  + 9 * num_poses_;   }
+  int num_observations()       const  { return num_observations_;               }
+  int num_landmarks()          const  { return num_landmarks_;                  }
+  int num_poses()              const  { return num_poses_;                      }
+  const double* observations() const  { return observations_;                   }
+  double* getParamterPtr()            { return parameters_;                     }
 
-
-
-  double* mutable_camera_for_observation(int i) {
-    return getParamterPtr() + pose_index_[i] * 9;
-  }
-
-  int pose_id_for_observation(int i) {
-    return pose_index_[i];
-  }
-
-  int landmark_id_for_observation(int i) {
-    return landmark_index_[i];
-  }
+  int pose_id_for_observation(int i)     { return pose_index_[i];               }
+  int landmark_id_for_observation(int i) { return landmark_index_[i];           }
 
   bool LoadFile(const char* filename) {
     FILE* fptr = fopen(filename, "r");
@@ -135,7 +125,6 @@ class BALProblem {
   double* observations_;
   double* parameters_;
 
-
 };
 
 // Templated pinhole camera model for used with Ceres.  The camera is
@@ -148,18 +137,19 @@ struct SnavelyReprojectionError {
       : observed_x(observed_x), observed_y(observed_y) {}
 
   template <typename T>
-  bool operator()(const T* const pose,
+  bool operator()(const T* const rotation,
+                  const T* const translation,
                   const T* const camera,
                   const T* const point,
                   T* residuals) const {
     // camera[0,1,2] are the angle-axis rotation.
     T p[3];
-    ceres::AngleAxisRotatePoint(pose, point, p);
+    ceres::AngleAxisRotatePoint(rotation, point, p);
 
     // camera[3,4,5] are the translation.
-    p[0] += pose[3];
-    p[1] += pose[4];
-    p[2] += pose[5];
+    p[0] += translation[0];
+    p[1] += translation[1];
+    p[2] += translation[2];
 
     // Compute the center of distortion. The sign change comes from
     // the camera model that Noah Snavely's Bundler assumes, whereby
@@ -189,13 +179,14 @@ struct SnavelyReprojectionError {
   // the client code.
   static ceres::CostFunction* Create(const double observed_x,
                                      const double observed_y) {
-    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 6, 3, 3>(
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 3, 3, 3, 3>(
                 new SnavelyReprojectionError(observed_x, observed_y)));
   }
 
   double observed_x;
   double observed_y;
 };
+
 
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
@@ -213,17 +204,19 @@ int main(int argc, char** argv) {
 
   /*** Parameters to be estimated ***/
 
-  double* pose_parameter_ptr = new double[6*bal_problem.num_poses()];
+  double* rotation_parameter_ptr = new double[3*bal_problem.num_poses()];    // TODO: Use defined ParameterBlock
+  std::vector<Timed3dParameterBlock> translation_parameter;
   double* camera_parameter_ptr = new double[3*bal_problem.num_poses()];
+
 
   for (int i=0; i < bal_problem.num_poses(); ++i) {
     double* parameter_ptr = bal_problem.getParamterPtr() + 9*i;
 
-    for (int j=0; j < 6; ++j) {
-       pose_parameter_ptr[6*i+j] = parameter_ptr[j];
-    }
+    Eigen::Vector3d translation_init(parameter_ptr[3], parameter_ptr[4], parameter_ptr[5]);
+    translation_parameter.push_back(Timed3dParameterBlock(translation_init, i, i));
 
     for (int j=0; j < 3; ++j) {
+       rotation_parameter_ptr[3*i+j] = parameter_ptr[j];
        camera_parameter_ptr[3*i+j] = parameter_ptr[6+j];
     }
   }
@@ -231,12 +224,15 @@ int main(int argc, char** argv) {
   std::vector<LandmarkParameterBlock> landmark_parameter;
 
   for (int i=0; i < bal_problem.num_landmarks(); ++i) {
-    double* landmark_ptr = bal_problem.mutable_landmarks() + 3*i;
+    double* landmark_ptr = bal_problem.getParamterPtr() + 9 * bal_problem.num_poses() + 3*i;
+
     Eigen::Vector3d landmark_init(landmark_ptr[0], landmark_ptr[1], landmark_ptr[2]);
     landmark_parameter.push_back(LandmarkParameterBlock(landmark_init, i, true));
   }
 
   const double* observations = bal_problem.observations();
+
+
 
   // Create residuals for each observation in the bundle adjustment problem. The
   // parameters for cameras and points are added automatically.
@@ -255,7 +251,8 @@ int main(int argc, char** argv) {
     int landmark_id = bal_problem.landmark_id_for_observation(i);
     problem.AddResidualBlock(cost_function,
                              NULL /* squared loss */,
-                             pose_parameter_ptr + 6*pose_id,
+                             rotation_parameter_ptr + 3*pose_id,
+                             translation_parameter.at(pose_id).parameters(),
                              camera_parameter_ptr + 3*pose_id,
                              landmark_parameter.at(landmark_id).parameters());
   }

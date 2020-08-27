@@ -49,32 +49,42 @@
 // namespace ceres{
 
 /// \brief Wraps the parameter block for a pose estimate
-class TimedQuatParameterBlock: public ParameterBlockSized<4, 3, Eigen::Quaterniond> {
+class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaterniond> {
  public:
 
   /// \brief The estimate type (3D vector).
   typedef Eigen::Quaterniond estimate_t;
 
   /// \brief The base class type.
-  typedef ParameterBlockSized<4, 3, Eigen::Quaterniond> base_t;
+  typedef SizedParameterBlock<4, 3, Eigen::Quaterniond> base_t;
 
   /// \brief Default constructor (assumes not fixed).
-  TimedQuatParameterBlock();
+  TimedQuatParameterBlock(): 
+    base_t::SizedParameterBlock() {
+      setFixed(false);
+  }
 
   /// \brief Constructor with estimate and time.
   /// @param[in] T_WS The pose estimate as T_WS.
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] timestamp The timestamp of this state.
   TimedQuatParameterBlock(const Eigen::Quaterniond& quat, uint64_t id, 
-                          const uint64_t timestamp);
+                          const uint64_t timestamp) {
+    setEstimate(quat);
+    setId(id);
+    setTimestamp(timestamp);
+    setFixed(false);
+  }
+
 
   /// \brief Trivial destructor.
-  virtual ~TimedQuatParameterBlock();
+  ~TimedQuatParameterBlock() {}
 
   // setters
   /// @brief Set estimate of this parameter block.
   /// @param[in] T_WS The estimate to set this to.
   virtual void setEstimate(const Eigen::Quaterniond& quat);
+
 
   /// @param[in] timestamp The timestamp of this state.
   void setTimestamp(const uint64_t timestamp){timestamp_=timestamp;}
