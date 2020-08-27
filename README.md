@@ -1,9 +1,7 @@
 # Mini VI SLAM
 
 
-The parameters are defined between line 20-30.
-
-Please make sure the dataset path (defined at line 84) is updated.
+### Build instruction
 
 To build this project, just follow standard CMake procedure.
 ```
@@ -11,4 +9,18 @@ mkdir build
 cd build
 cmake ..
 cmake --build .
+```
+
+### Usage
+
+Please check the configuration file `config/test.yaml` for the workflow including both frontend and backend.
+
+To run `frontend`, please provide the directory of images.
+```
+./frontend [path_to_image_directory]
+```
+
+To run `backend`, one needs to sepcify three files: observation file, IMU file, and ground truth for initialization.
+```
+./frontend [path_to_observation_file] [path_to_imu_file] [path_to_ground_truthw_file]
 ```
