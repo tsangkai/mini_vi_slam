@@ -110,10 +110,13 @@ struct SnavelyReprojectionError {
 
 // Read a Bundle Adjustment in the Large dataset.
 class BALProblem {
+
  public:
+  
   BALProblem() {
     initalized_ = false;
   }
+
   ~BALProblem() {
     delete[] landmark_index_;
     delete[] pose_index_;
@@ -134,9 +137,6 @@ class BALProblem {
     landmark_index_ = new int[num_observations_];
     pose_index_ = new int[num_observations_];
     observations_ = new double[2 * num_observations_];
-
-
-
 
     num_parameters_ = 9 * num_poses_ + 3 * num_landmarks_;
     parameters_ = new double[num_parameters_];
@@ -168,7 +168,7 @@ class BALProblem {
       // rotation
       double quat_arr[4];
       ceres::AngleAxisToQuaternion(parameter_ptr, quat_arr);
-      Eigen::Quaterniond rotation_init(quat_arr[0], quat_arr[1], quat_arr[2], quat_arr[4]);
+      Eigen::Quaterniond rotation_init(quat_arr[0], quat_arr[1], quat_arr[2], quat_arr[3]);
       rotation_parameter_.push_back(TimedQuatParameterBlock(rotation_init, i, i));
 
       // translation
@@ -191,10 +191,6 @@ class BALProblem {
       Eigen::Vector3d landmark_init(landmark_ptr[0], landmark_ptr[1], landmark_ptr[2]);
       landmark_parameter_.push_back(LandmarkParameterBlock(landmark_init, i, true));
     }
-
-
-
-    // const double* observations = bal_problem.observations(); == observations_
 
     for (int i = 0; i < num_observations_; ++i) {
     // Each Residual block takes a point and a camera as input and outputs a 2
