@@ -66,7 +66,7 @@ class BALProblem {
   int num_points()             const { return num_points_;                     }
   const double* observations() const { return observations_;                   }
   double* mutable_cameras()          { return parameters_;                     }
-  double* mutable_points()           { return parameters_  + 9 * num_cameras_; }
+  // double* mutable_points()           { return parameters_  + 9 * num_cameras_; }
 
   double* mutable_camera_for_observation(int i) {
     return mutable_cameras() + pose_index_[i] * 9;
@@ -90,7 +90,7 @@ class BALProblem {
     pose_index_ = new int[num_observations_];
     observations_ = new double[2 * num_observations_];
 
-    num_parameters_ = 9 * num_cameras_ + 3 * num_points_;
+    num_parameters_ = 9 * num_cameras_; // + 3 * num_points_;
     parameters_ = new double[num_parameters_];
 
     for (int i = 0; i < num_observations_; ++i) {
@@ -125,6 +125,8 @@ class BALProblem {
   int* pose_index_;
   double* observations_;
   double* parameters_;
+  double* pose_parameters_;
+  double* camera_parameters_;
 };
 
 // Templated pinhole camera model for used with Ceres.  The camera is
@@ -204,8 +206,7 @@ int main(int argc, char** argv) {
   std::vector<LandmarkParameterBlock> landmark_parameter;
 
   for (int i=0; i < bal_problem.num_points(); ++i) {
-    Eigen::Vector3d init_point(0,0,0);
-    landmark_parameter.push_back(LandmarkParameterBlock(init_point, i, true));
+    landmark_parameter.push_back(LandmarkParameterBlock(Eigen::Vector3d(), i, true));
   }
 
 
@@ -220,10 +221,7 @@ int main(int argc, char** argv) {
     ceres::CostFunction* cost_function =
         SnavelyReprojectionError::Create(observations[2 * i + 0],
                                          observations[2 * i + 1]);
-    // problem.AddResidualBlock(cost_function,
-    //                         NULL /* squared loss */,
-    //                         bal_problem.mutable_camera_for_observation(i),
-    //                         bal_problem.mutable_point_for_observation(i));
+
 
     int landmark_id = bal_problem.landmark_id_for_observation(i);
     problem.AddResidualBlock(cost_function,

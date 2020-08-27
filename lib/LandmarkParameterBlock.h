@@ -164,7 +164,7 @@ class LandmarkParameterBlock: public ParameterBlockSized<3, 3, Eigen::Vector3d> 
   /// }
 
   /// @brief Return parameter block type as string
-  virtual std::string typeInfo() const
+  std::string typeInfo() const
   {
     return "LandmarkParameterBlock";
   }

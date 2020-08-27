@@ -58,31 +58,45 @@ class Timed3dParameterBlock : public ParameterBlockSized<3, 3, Eigen::Vector3d> 
   typedef ParameterBlockSized<3, 3, estimate_t> base_t;
 
   /// \brief Default constructor (assumes not fixed).
-  Timed3dParameterBlock();
+  Timed3dParameterBlock(): 
+    base_t::ParameterBlockSized() {
+      setFixed(false);
+  }
 
   /// \brief Constructor with estimate and time.
   /// @param[in] T_WS The pose estimate as T_WS.
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] timestamp The timestamp of this state.
-  Timed3dParameterBlock(const Eigen::Vector4d& point, uint64_t id, 
-                        const uint64_t timestamp);
+  Timed3dParameterBlock(const Eigen::Vector3d& point, uint64_t id, 
+                        const uint64_t timestamp) {
+    setEstimate(point);
+    setId(id);
+    setTimestamp(timestamp);
+    setFixed(false);
+  }
+
 
   /// \brief Trivial destructor.
-  virtual ~Timed3dParameterBlock();
+  ~Timed3dParameterBlock() {};
 
   // setters
   /// @brief Set estimate of this parameter block.
   /// @param[in] T_WS The estimate to set this to.
-  virtual void setEstimate(const Eigen::Vector3d& point);
-
+  void setEstimate(const Eigen::Vector3d& point) {
+    // hack: only do "Euclidean" points for now...
+    for (int i = 0; i < base_t::Dimension; ++i)
+      parameters_[i] = point[i];
+  }
+  
   /// @param[in] timestamp The timestamp of this state.
   void setTimestamp(const uint64_t timestamp){timestamp_=timestamp;}
 
   // getters
   /// @brief Get estimate.
   /// \return The estimate.
-  virtual Eigen::Vector3d estimate() const;
-
+  Eigen::Vector3d estimate() const {
+    return Eigen::Vector3d(parameters_[0], parameters_[1], parameters_[2]);
+  }
   /// \brief Get the time.
   /// \return The timestamp of this state.
   uint64_t timestamp() const {return timestamp_;}
