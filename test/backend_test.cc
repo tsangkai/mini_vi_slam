@@ -215,6 +215,11 @@ class BALProblem {
                                landmark_parameter_.at(landmark_index_[i]).parameters());
     }
 
+
+    // assume perfectly initialized
+    optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(0).parameters());
+    optimization_problem_.SetParameterBlockConstant(translation_parameter_.at(0).parameters());
+
     // Make Ceres automatically detect the bundle structure. Note that the
     // standard solver, SPARSE_NORMAL_CHOLESKY, also works fine but it is slower
     // for standard bundle adjustment problems.
