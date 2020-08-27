@@ -52,86 +52,6 @@
 #include "TimedQuatParameterBlock.h"
 
 
-
-
-// Read a Bundle Adjustment in the Large dataset.
-class BALProblem {
- public:
-  ~BALProblem() {
-    delete[] landmark_index_;
-    delete[] pose_index_;
-    delete[] observations_;
-    delete[] parameters_;
-  }
-
-  int num_observations()       const  { return num_observations_;               }
-  int num_landmarks()          const  { return num_landmarks_;                  }
-  int num_poses()              const  { return num_poses_;                      }
-  const double* observations() const  { return observations_;                   }
-  double* getParamterPtr()            { return parameters_;                     }
-
-  int pose_id_for_observation(int i)     { return pose_index_[i];               }
-  int landmark_id_for_observation(int i) { return landmark_index_[i];           }
-
-  bool LoadFile(const char* filename) {
-    FILE* fptr = fopen(filename, "r");
-    if (fptr == NULL) {
-      return false;
-    };
-
-    FscanfOrDie(fptr, "%d", &num_poses_);        // poses
-    FscanfOrDie(fptr, "%d", &num_landmarks_);    // landmarks
-    FscanfOrDie(fptr, "%d", &num_observations_);
-
-    landmark_index_ = new int[num_observations_];
-    pose_index_ = new int[num_observations_];
-    observations_ = new double[2 * num_observations_];
-
-    num_parameters_ = 9 * num_poses_ + 3 * num_landmarks_;
-    parameters_ = new double[num_parameters_];
-
-    for (int i = 0; i < num_observations_; ++i) {
-      FscanfOrDie(fptr, "%d", pose_index_ + i);
-      FscanfOrDie(fptr, "%d", landmark_index_ + i);
-      for (int j = 0; j < 2; ++j) {
-        FscanfOrDie(fptr, "%lf", observations_ + 2*i + j);
-      }
-    }
-
-    // parameter initialization
-    for (int i = 0; i < num_parameters_; ++i) {
-      FscanfOrDie(fptr, "%lf", parameters_ + i);
-    }
-
-    return true;
-  }
-
- private:
-  template<typename T>
-  void FscanfOrDie(FILE *fptr, const char *format, T *value) {
-    int num_scanned = fscanf(fptr, format, value);
-    if (num_scanned != 1) {
-      LOG(FATAL) << "Invalid UW data file.";
-    }
-  }
-
-  int num_poses_;      // poses
-  int num_landmarks_;       // landmarks
-  int num_observations_;
-  int num_parameters_;   
-
-  int* landmark_index_;
-  int* pose_index_;
-  double* observations_;
-  double* parameters_;
-
-};
-
-// Templated pinhole camera model for used with Ceres.  The camera is
-// parameterized using 9 parameters: 3 for rotation, 3 for translation, 1 for
-// focal length and 2 for radial distortion. The principal point is not modeled
-// (i.e. it is assumed be located at the image center).
-// functors!
 struct SnavelyReprojectionError {
   SnavelyReprojectionError(double observed_x, double observed_y)
       : observed_x(observed_x), observed_y(observed_y) {}
@@ -188,6 +108,159 @@ struct SnavelyReprojectionError {
 };
 
 
+// Read a Bundle Adjustment in the Large dataset.
+class BALProblem {
+ public:
+  BALProblem() {
+    initalized_ = false;
+  }
+  ~BALProblem() {
+    delete[] landmark_index_;
+    delete[] pose_index_;
+    delete[] observations_;
+    delete[] parameters_;
+  }
+
+  bool loadFile(const char* filename) {
+    FILE* fptr = fopen(filename, "r");
+    if (fptr == NULL) {
+      return false;
+    };
+
+    FscanfOrDie(fptr, "%d", &num_poses_);        // poses
+    FscanfOrDie(fptr, "%d", &num_landmarks_);    // landmarks
+    FscanfOrDie(fptr, "%d", &num_observations_);
+
+    landmark_index_ = new int[num_observations_];
+    pose_index_ = new int[num_observations_];
+    observations_ = new double[2 * num_observations_];
+
+
+
+
+    num_parameters_ = 9 * num_poses_ + 3 * num_landmarks_;
+    parameters_ = new double[num_parameters_];
+
+    for (int i = 0; i < num_observations_; ++i) {
+      FscanfOrDie(fptr, "%d", pose_index_ + i);
+      FscanfOrDie(fptr, "%d", landmark_index_ + i);
+      for (int j = 0; j < 2; ++j) {
+        FscanfOrDie(fptr, "%lf", observations_ + 2*i + j);
+      }
+    }
+
+    // parameter initialization
+    for (int i = 0; i < num_parameters_; ++i) {
+      FscanfOrDie(fptr, "%lf", parameters_ + i);
+    }
+
+    initalized_ = true;
+    return true;
+  }
+
+  bool solveOptimizationProblem() {
+    if (!initalized_)
+      return false;
+
+    for (int i=0; i < num_poses_; ++i) {
+      double* parameter_ptr = parameters_ + 9*i;
+
+      // rotation
+      double quat_arr[4];
+      ceres::AngleAxisToQuaternion(parameter_ptr, quat_arr);
+      Eigen::Quaterniond rotation_init(quat_arr[0], quat_arr[1], quat_arr[2], quat_arr[4]);
+      rotation_parameter_.push_back(TimedQuatParameterBlock(rotation_init, i, i));
+
+      // translation
+      Eigen::Vector3d translation_init(parameter_ptr[3], parameter_ptr[4], parameter_ptr[5]);
+      translation_parameter_.push_back(Timed3dParameterBlock(translation_init, i, i));
+
+      // camera extrinsic parameter
+      double camera_ext_init[3];
+
+      for (int j=0; j < 3; ++j) {
+         camera_ext_init[j] = parameter_ptr[6+j];
+      }
+      camera_parameter_.push_back(camera_ext_init);
+    }
+
+
+    for (int i=0; i < num_landmarks_; ++i) {
+      double* landmark_ptr = parameters_ + 9*num_poses_ + 3*i;
+
+      Eigen::Vector3d landmark_init(landmark_ptr[0], landmark_ptr[1], landmark_ptr[2]);
+      landmark_parameter_.push_back(LandmarkParameterBlock(landmark_init, i, true));
+    }
+
+
+
+    // const double* observations = bal_problem.observations(); == observations_
+
+    for (int i = 0; i < num_observations_; ++i) {
+    // Each Residual block takes a point and a camera as input and outputs a 2
+    // dimensional residual. Internally, the cost function stores the observed
+    // image location and compares the reprojection against the observation.
+
+      ceres::CostFunction* cost_function =
+        SnavelyReprojectionError::Create(observations_[2*i+0],
+                                         observations_[2*i+1]);
+
+      // int pose_id = bal_problem.pose_id_for_observation(i);
+      // int landmark_id = bal_problem.landmark_id_for_observation(i);
+      optimization_problem_.AddResidualBlock(cost_function,
+                               NULL /* squared loss */,
+                               rotation_parameter_.at(pose_index_[i]).parameters(),
+                               translation_parameter_.at(pose_index_[i]).parameters(),
+                               camera_parameter_.at(pose_index_[i]), 
+                               landmark_parameter_.at(landmark_index_[i]).parameters());
+    }
+
+    // Make Ceres automatically detect the bundle structure. Note that the
+    // standard solver, SPARSE_NORMAL_CHOLESKY, also works fine but it is slower
+    // for standard bundle adjustment problems.
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = true;
+
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &optimization_problem_, &summary);
+    std::cout << summary.FullReport() << "\n";
+
+    return true;
+
+  }
+
+ private:
+  template<typename T>
+  void FscanfOrDie(FILE *fptr, const char *format, T *value) {
+    int num_scanned = fscanf(fptr, format, value);
+    if (num_scanned != 1) {
+      LOG(FATAL) << "Invalid UW data file.";
+    }
+  }
+
+  bool initalized_;
+
+  int num_poses_;      // poses
+  int num_landmarks_;       // landmarks
+  int num_observations_;
+  int num_parameters_;   
+
+  int* landmark_index_;
+  int* pose_index_;
+  double* observations_;
+  double* parameters_;
+
+  ceres::Problem optimization_problem_;
+
+  std::vector<TimedQuatParameterBlock> rotation_parameter_;
+  std::vector<Timed3dParameterBlock> translation_parameter_;
+  std::vector<double*> camera_parameter_;
+  std::vector<LandmarkParameterBlock> landmark_parameter_;
+
+};
+
+
 int main(int argc, char** argv) {
   google::InitGoogleLogging(argv[0]);
   if (argc != 2) {
@@ -196,85 +269,13 @@ int main(int argc, char** argv) {
   }
 
   BALProblem bal_problem;
-  if (!bal_problem.LoadFile(argv[1])) {
+
+  if (!bal_problem.loadFile(argv[1])) {
     std::cerr << "ERROR: unable to open file " << argv[1] << "\n";
     return 1;
   }
 
+  bal_problem.solveOptimizationProblem();
 
-  /*** Parameters to be estimated ***/
-  std::vector<TimedQuatParameterBlock> rotation_parameter;
-  std::vector<Timed3dParameterBlock> translation_parameter;
-  std::vector<double*> camera_parameter_ptr;
-  std::vector<LandmarkParameterBlock> landmark_parameter;
-
-
-  for (int i=0; i < bal_problem.num_poses(); ++i) {
-    double* parameter_ptr = bal_problem.getParamterPtr() + 9*i;
-
-    // rotation
-    double quat_arr[4];
-    ceres::AngleAxisToQuaternion(parameter_ptr, quat_arr);
-    Eigen::Quaterniond rotation_init(quat_arr[0], quat_arr[1], quat_arr[2], quat_arr[4]);
-    rotation_parameter.push_back(TimedQuatParameterBlock(rotation_init, i, i));
-
-    // translation
-    Eigen::Vector3d translation_init(parameter_ptr[3], parameter_ptr[4], parameter_ptr[5]);
-    translation_parameter.push_back(Timed3dParameterBlock(translation_init, i, i));
-
-    // camera extrinsic parameter
-    double camera_ext_init[3];
-
-    for (int j=0; j < 3; ++j) {
-       camera_ext_init[j] = parameter_ptr[6+j];
-    }
-    camera_parameter_ptr.push_back(camera_ext_init);
-  }
-
-
-  for (int i=0; i < bal_problem.num_landmarks(); ++i) {
-    double* landmark_ptr = bal_problem.getParamterPtr() + 9 * bal_problem.num_poses() + 3*i;
-
-    Eigen::Vector3d landmark_init(landmark_ptr[0], landmark_ptr[1], landmark_ptr[2]);
-    landmark_parameter.push_back(LandmarkParameterBlock(landmark_init, i, true));
-  }
-
-  const double* observations = bal_problem.observations();
-
-
-
-  // Create residuals for each observation in the bundle adjustment problem. The
-  // parameters for cameras and points are added automatically.
-  ceres::Problem problem;
-  for (int i = 0; i < bal_problem.num_observations(); ++i) {
-    // Each Residual block takes a point and a camera as input and outputs a 2
-    // dimensional residual. Internally, the cost function stores the observed
-    // image location and compares the reprojection against the observation.
-
-    ceres::CostFunction* cost_function =
-        SnavelyReprojectionError::Create(observations[2*i+0],
-                                         observations[2*i+1]);
-
-
-    int pose_id = bal_problem.pose_id_for_observation(i);
-    int landmark_id = bal_problem.landmark_id_for_observation(i);
-    problem.AddResidualBlock(cost_function,
-                             NULL /* squared loss */,
-                             rotation_parameter.at(pose_id).parameters(),
-                             translation_parameter.at(pose_id).parameters(),
-                             camera_parameter_ptr.at(pose_id), 
-                             landmark_parameter.at(landmark_id).parameters());
-  }
-
-  // Make Ceres automatically detect the bundle structure. Note that the
-  // standard solver, SPARSE_NORMAL_CHOLESKY, also works fine but it is slower
-  // for standard bundle adjustment problems.
-  ceres::Solver::Options options;
-  options.linear_solver_type = ceres::DENSE_SCHUR;
-  options.minimizer_progress_to_stdout = true;
-
-  ceres::Solver::Summary summary;
-  ceres::Solve(options, &problem, &summary);
-  std::cout << summary.FullReport() << "\n";
   return 0;
 }
