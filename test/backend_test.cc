@@ -66,11 +66,13 @@ class BALProblem {
   int num_landmarks()          const { return num_landmarks_;                  }
   int num_poses()              const { return num_poses_;                      }
   const double* observations() const { return observations_;                   }
-  double* mutable_cameras()          { return parameters_;                     }
+  double* getParamterPtr()          { return parameters_;                     }
   double* mutable_landmarks()        { return parameters_  + 9 * num_poses_;   }
 
+
+
   double* mutable_camera_for_observation(int i) {
-    return mutable_cameras() + pose_index_[i] * 9;
+    return getParamterPtr() + pose_index_[i] * 9;
   }
 
   int pose_id_for_observation(int i) {
@@ -133,8 +135,7 @@ class BALProblem {
   double* observations_;
   double* parameters_;
 
-  double* pose_parameters_;
-  double* camera_parameters_;
+
 };
 
 // Templated pinhole camera model for used with Ceres.  The camera is
@@ -147,17 +148,18 @@ struct SnavelyReprojectionError {
       : observed_x(observed_x), observed_y(observed_y) {}
 
   template <typename T>
-  bool operator()(const T* const camera,
+  bool operator()(const T* const pose,
+                  const T* const camera,
                   const T* const point,
                   T* residuals) const {
     // camera[0,1,2] are the angle-axis rotation.
     T p[3];
-    ceres::AngleAxisRotatePoint(camera, point, p);
+    ceres::AngleAxisRotatePoint(pose, point, p);
 
     // camera[3,4,5] are the translation.
-    p[0] += camera[3];
-    p[1] += camera[4];
-    p[2] += camera[5];
+    p[0] += pose[3];
+    p[1] += pose[4];
+    p[2] += pose[5];
 
     // Compute the center of distortion. The sign change comes from
     // the camera model that Noah Snavely's Bundler assumes, whereby
@@ -166,13 +168,13 @@ struct SnavelyReprojectionError {
     T yp = - p[1] / p[2];
 
     // Apply second and fourth order radial distortion.
-    const T& l1 = camera[7];
-    const T& l2 = camera[8];
+    const T& l1 = camera[1];
+    const T& l2 = camera[2];
     T r2 = xp*xp + yp*yp;
     T distortion = 1.0 + r2  * (l1 + l2  * r2);
 
     // Compute final projected point position.
-    const T& focal = camera[6];
+    const T& focal = camera[0];
     T predicted_x = focal * distortion * xp;
     T predicted_y = focal * distortion * yp;
 
@@ -187,7 +189,7 @@ struct SnavelyReprojectionError {
   // the client code.
   static ceres::CostFunction* Create(const double observed_x,
                                      const double observed_y) {
-    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 9, 3>(
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 6, 3, 3>(
                 new SnavelyReprojectionError(observed_x, observed_y)));
   }
 
@@ -208,18 +210,33 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  const double* observations = bal_problem.observations();
 
+  /*** Parameters to be estimated ***/
 
+  double* pose_parameter_ptr = new double[6*bal_problem.num_poses()];
+  double* camera_parameter_ptr = new double[3*bal_problem.num_poses()];
 
+  for (int i=0; i < bal_problem.num_poses(); ++i) {
+    double* parameter_ptr = bal_problem.getParamterPtr() + 9*i;
+
+    for (int j=0; j < 6; ++j) {
+       pose_parameter_ptr[6*i+j] = parameter_ptr[j];
+    }
+
+    for (int j=0; j < 3; ++j) {
+       camera_parameter_ptr[3*i+j] = parameter_ptr[6+j];
+    }
+  }
 
   std::vector<LandmarkParameterBlock> landmark_parameter;
+
   for (int i=0; i < bal_problem.num_landmarks(); ++i) {
     double* landmark_ptr = bal_problem.mutable_landmarks() + 3*i;
     Eigen::Vector3d landmark_init(landmark_ptr[0], landmark_ptr[1], landmark_ptr[2]);
     landmark_parameter.push_back(LandmarkParameterBlock(landmark_init, i, true));
   }
 
+  const double* observations = bal_problem.observations();
 
   // Create residuals for each observation in the bundle adjustment problem. The
   // parameters for cameras and points are added automatically.
@@ -234,10 +251,12 @@ int main(int argc, char** argv) {
                                          observations[2*i+1]);
 
 
+    int pose_id = bal_problem.pose_id_for_observation(i);
     int landmark_id = bal_problem.landmark_id_for_observation(i);
     problem.AddResidualBlock(cost_function,
                              NULL /* squared loss */,
-                             bal_problem.mutable_camera_for_observation(i),
+                             pose_parameter_ptr + 6*pose_id,
+                             camera_parameter_ptr + 3*pose_id,
                              landmark_parameter.at(landmark_id).parameters());
   }
 
