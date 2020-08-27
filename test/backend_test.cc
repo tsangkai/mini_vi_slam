@@ -63,16 +63,21 @@ class BALProblem {
   }
 
   int num_observations()       const { return num_observations_;               }
-  int num_points()             const { return num_points_;                     }
+  int num_landmarks()          const { return num_landmarks_;                  }
+  int num_poses()              const { return num_poses_;                      }
   const double* observations() const { return observations_;                   }
   double* mutable_cameras()          { return parameters_;                     }
-  // double* mutable_points()           { return parameters_  + 9 * num_cameras_; }
+  double* mutable_landmarks()        { return parameters_  + 9 * num_poses_;   }
 
   double* mutable_camera_for_observation(int i) {
     return mutable_cameras() + pose_index_[i] * 9;
   }
+
+  int pose_id_for_observation(int i) {
+    return pose_index_[i];
+  }
+
   int landmark_id_for_observation(int i) {
-    // return mutable_points() + landmark_index_[i] * 3;
     return landmark_index_[i];
   }
 
@@ -82,15 +87,15 @@ class BALProblem {
       return false;
     };
 
-    FscanfOrDie(fptr, "%d", &num_cameras_);  // states
-    FscanfOrDie(fptr, "%d", &num_points_);   // landmarks
+    FscanfOrDie(fptr, "%d", &num_poses_);  // states
+    FscanfOrDie(fptr, "%d", &num_landmarks_);   // landmarks
     FscanfOrDie(fptr, "%d", &num_observations_);
 
     landmark_index_ = new int[num_observations_];
     pose_index_ = new int[num_observations_];
     observations_ = new double[2 * num_observations_];
 
-    num_parameters_ = 9 * num_cameras_; // + 3 * num_points_;
+    num_parameters_ = 9 * num_poses_ + 3 * num_landmarks_;
     parameters_ = new double[num_parameters_];
 
     for (int i = 0; i < num_observations_; ++i) {
@@ -101,9 +106,11 @@ class BALProblem {
       }
     }
 
+    // parameter initialization
     for (int i = 0; i < num_parameters_; ++i) {
       FscanfOrDie(fptr, "%lf", parameters_ + i);
     }
+
     return true;
   }
 
@@ -116,15 +123,16 @@ class BALProblem {
     }
   }
 
-  int num_cameras_;      // poses
-  int num_points_;       // landmarks
+  int num_poses_;      // poses
+  int num_landmarks_;       // landmarks
   int num_observations_;
-  int num_parameters_;   // unnecessary
+  int num_parameters_;   
 
   int* landmark_index_;
   int* pose_index_;
   double* observations_;
   double* parameters_;
+
   double* pose_parameters_;
   double* camera_parameters_;
 };
@@ -140,11 +148,11 @@ struct SnavelyReprojectionError {
 
   template <typename T>
   bool operator()(const T* const camera,
-                  const T* const landmark,
+                  const T* const point,
                   T* residuals) const {
     // camera[0,1,2] are the angle-axis rotation.
     T p[3];
-    ceres::AngleAxisRotatePoint(camera, landmark, p);
+    ceres::AngleAxisRotatePoint(camera, point, p);
 
     // camera[3,4,5] are the translation.
     p[0] += camera[3];
@@ -203,10 +211,13 @@ int main(int argc, char** argv) {
   const double* observations = bal_problem.observations();
 
 
-  std::vector<LandmarkParameterBlock> landmark_parameter;
 
-  for (int i=0; i < bal_problem.num_points(); ++i) {
-    landmark_parameter.push_back(LandmarkParameterBlock(Eigen::Vector3d(), i, true));
+
+  std::vector<LandmarkParameterBlock> landmark_parameter;
+  for (int i=0; i < bal_problem.num_landmarks(); ++i) {
+    double* landmark_ptr = bal_problem.mutable_landmarks() + 3*i;
+    Eigen::Vector3d landmark_init(landmark_ptr[0], landmark_ptr[1], landmark_ptr[2]);
+    landmark_parameter.push_back(LandmarkParameterBlock(landmark_init, i, true));
   }
 
 
@@ -219,8 +230,8 @@ int main(int argc, char** argv) {
     // image location and compares the reprojection against the observation.
 
     ceres::CostFunction* cost_function =
-        SnavelyReprojectionError::Create(observations[2 * i + 0],
-                                         observations[2 * i + 1]);
+        SnavelyReprojectionError::Create(observations[2*i+0],
+                                         observations[2*i+1]);
 
 
     int landmark_id = bal_problem.landmark_id_for_observation(i);
