@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 
   // the folder path
   // std::string path(argv[1]);
-  std::string path("../../../dataset/mav0/");
+  std::string path("../../../../dataset/mav0/");
   std::string camera_data_folder("cam0/data/");
 
   std::vector<std::string> image_names;

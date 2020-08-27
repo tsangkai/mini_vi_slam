@@ -2,6 +2,9 @@
 // Copyright 2015 Google Inc. All rights reserved.
 // http://ceres-solver.org/
 //
+// This test file is modifiled from the CERES examples
+
+
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are met:
 //
@@ -38,6 +41,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iostream>
+#include <vector>
 
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
@@ -52,22 +56,24 @@
 class BALProblem {
  public:
   ~BALProblem() {
-    delete[] point_index_;
-    delete[] camera_index_;
+    delete[] landmark_index_;
+    delete[] pose_index_;
     delete[] observations_;
     delete[] parameters_;
   }
 
   int num_observations()       const { return num_observations_;               }
+  int num_points()             const { return num_points_;                     }
   const double* observations() const { return observations_;                   }
   double* mutable_cameras()          { return parameters_;                     }
   double* mutable_points()           { return parameters_  + 9 * num_cameras_; }
 
   double* mutable_camera_for_observation(int i) {
-    return mutable_cameras() + camera_index_[i] * 9;
+    return mutable_cameras() + pose_index_[i] * 9;
   }
-  double* mutable_point_for_observation(int i) {
-    return mutable_points() + point_index_[i] * 3;
+  int landmark_id_for_observation(int i) {
+    // return mutable_points() + landmark_index_[i] * 3;
+    return landmark_index_[i];
   }
 
   bool LoadFile(const char* filename) {
@@ -76,20 +82,20 @@ class BALProblem {
       return false;
     };
 
-    FscanfOrDie(fptr, "%d", &num_cameras_);
-    FscanfOrDie(fptr, "%d", &num_points_);
+    FscanfOrDie(fptr, "%d", &num_cameras_);  // states
+    FscanfOrDie(fptr, "%d", &num_points_);   // landmarks
     FscanfOrDie(fptr, "%d", &num_observations_);
 
-    point_index_ = new int[num_observations_];
-    camera_index_ = new int[num_observations_];
+    landmark_index_ = new int[num_observations_];
+    pose_index_ = new int[num_observations_];
     observations_ = new double[2 * num_observations_];
 
     num_parameters_ = 9 * num_cameras_ + 3 * num_points_;
     parameters_ = new double[num_parameters_];
 
     for (int i = 0; i < num_observations_; ++i) {
-      FscanfOrDie(fptr, "%d", camera_index_ + i);
-      FscanfOrDie(fptr, "%d", point_index_ + i);
+      FscanfOrDie(fptr, "%d", pose_index_ + i);
+      FscanfOrDie(fptr, "%d", landmark_index_ + i);
       for (int j = 0; j < 2; ++j) {
         FscanfOrDie(fptr, "%lf", observations_ + 2*i + j);
       }
@@ -110,13 +116,13 @@ class BALProblem {
     }
   }
 
-  int num_cameras_;  // poses
-  int num_points_;   // landmarks
+  int num_cameras_;      // poses
+  int num_points_;       // landmarks
   int num_observations_;
-  int num_parameters_;  // unnecessary
+  int num_parameters_;   // unnecessary
 
-  int* point_index_;
-  int* camera_index_;
+  int* landmark_index_;
+  int* pose_index_;
   double* observations_;
   double* parameters_;
 };
@@ -132,11 +138,11 @@ struct SnavelyReprojectionError {
 
   template <typename T>
   bool operator()(const T* const camera,
-                  const T* const point,
+                  const T* const landmark,
                   T* residuals) const {
     // camera[0,1,2] are the angle-axis rotation.
     T p[3];
-    ceres::AngleAxisRotatePoint(camera, point, p);
+    ceres::AngleAxisRotatePoint(camera, landmark, p);
 
     // camera[3,4,5] are the translation.
     p[0] += camera[3];
@@ -194,6 +200,15 @@ int main(int argc, char** argv) {
 
   const double* observations = bal_problem.observations();
 
+
+  std::vector<LandmarkParameterBlock> landmark_parameter;
+
+  for (int i=0; i < bal_problem.num_points(); ++i) {
+    Eigen::Vector3d init_point(0,0,0);
+    landmark_parameter.push_back(LandmarkParameterBlock(init_point, i, true));
+  }
+
+
   // Create residuals for each observation in the bundle adjustment problem. The
   // parameters for cameras and points are added automatically.
   ceres::Problem problem;
@@ -205,10 +220,16 @@ int main(int argc, char** argv) {
     ceres::CostFunction* cost_function =
         SnavelyReprojectionError::Create(observations[2 * i + 0],
                                          observations[2 * i + 1]);
+    // problem.AddResidualBlock(cost_function,
+    //                         NULL /* squared loss */,
+    //                         bal_problem.mutable_camera_for_observation(i),
+    //                         bal_problem.mutable_point_for_observation(i));
+
+    int landmark_id = bal_problem.landmark_id_for_observation(i);
     problem.AddResidualBlock(cost_function,
                              NULL /* squared loss */,
                              bal_problem.mutable_camera_for_observation(i),
-                             bal_problem.mutable_point_for_observation(i));
+                             landmark_parameter.at(landmark_id).parameters());
   }
 
   // Make Ceres automatically detect the bundle structure. Note that the

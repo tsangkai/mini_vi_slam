@@ -49,7 +49,7 @@
 /// \brief ceres Namespace for ceres-related functionality implemented in okvis.
 // namespace ceres {
 
-class LandmarkParameterBlock : public ParameterBlockSized<3, 3, Eigen::Vector3d> {
+class LandmarkParameterBlock: public ParameterBlockSized<3, 3, Eigen::Vector3d> {
  public:
 
   /// \brief The estimate type (3D vector).
@@ -59,7 +59,10 @@ class LandmarkParameterBlock : public ParameterBlockSized<3, 3, Eigen::Vector3d>
   typedef ParameterBlockSized<3, 3, estimate_t> base_t;
 
   /// \brief Default constructor (assumes not fixed).
-  LandmarkParameterBlock();
+  LandmarkParameterBlock(): base_t::ParameterBlockSized(),
+    initialized_(false) {
+    setFixed(false);
+  }
 
 
   /// \brief Constructor with estimate and time.
@@ -67,17 +70,22 @@ class LandmarkParameterBlock : public ParameterBlockSized<3, 3, Eigen::Vector3d>
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] initialized Whether or not the 3d position is considered initialised.
   LandmarkParameterBlock(const Eigen::Vector3d& point, uint64_t id,
-                         bool initialized = true);
+                         bool initialized = true) {
+    setEstimate(point);
+    setId(id);
+    setInitialized(initialized);
+    setFixed(false);
+  }
 
   /// \brief Trivial destructor.
-  virtual ~LandmarkParameterBlock();
+  ~LandmarkParameterBlock() {};
 
   /// @name Setters
   /// @{
 
   /// @brief Set estimate of this parameter block.
   /// @param[in] point The estimate to set this to.
-  virtual void setEstimate(const Eigen::Vector3d& point) {
+  void setEstimate(const Eigen::Vector3d& point) {
     // hack: only do "Euclidean" points for now...
     for (int i = 0; i < base_t::Dimension; ++i)
       parameters_[i] = point[i];
@@ -96,7 +104,7 @@ class LandmarkParameterBlock : public ParameterBlockSized<3, 3, Eigen::Vector3d>
 
   /// @brief Get estimate
   /// \return The estimate.
-  virtual Eigen::Vector3d estimate() const {
+  Eigen::Vector3d estimate() const {
     return Eigen::Vector3d(parameters_[0], parameters_[1], parameters_[2]);
   }
 
