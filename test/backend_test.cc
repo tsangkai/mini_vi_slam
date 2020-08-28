@@ -160,20 +160,38 @@ class ReprojectionError: public ceres::SizedCostFunction<
 
     // Jacobian Calculations         // TODO
     if (jacobians != NULL) {
+      
+      // chain rule
+      Eigen::MatrixXd J_residual_to_p(2,3);
+      J_residual_to_p(0,0) = focal * distortion * (-1.0) / p[2];
+      J_residual_to_p(0,1) = 0;
+      J_residual_to_p(0,2) = focal * distortion * p[0] / (p[2]*p[2]);
+      J_residual_to_p(1,0) = 0;
+      J_residual_to_p(1,1) = focal * distortion * (-1.0) / p[2];
+      J_residual_to_p(1,2) = focal * distortion * p[1] / (p[2]*p[2]);
+
       // rotation
       if (jacobians[0] != NULL) {
         // hallucinate Jacobian w.r.t. state
         Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);      
 
-        J0(0,0) = distortion * xp;
-        J0(0,1) = focal * r2 * xp;
-        J0(0,2) = focal * r2 * r2 * xp;
-        J0(0,3) = focal * r2 * r2 * xp;
+        Eigen::MatrixXd J_p_to_q(3,4);
+        J_p_to_q(0,0) = _landmark[0]*( 2)*_rotation[0]+_landmark[1]*(-2)*_rotation[3]+_landmark[2]*( 2)*_rotation[2];
+        J_p_to_q(0,1) = _landmark[0]*( 2)*_rotation[1]+_landmark[1]*( 2)*_rotation[2]+_landmark[2]*( 2)*_rotation[3];
+        J_p_to_q(0,2) = _landmark[0]*(-2)*_rotation[2]+_landmark[1]*( 2)*_rotation[1]+_landmark[2]*( 2)*_rotation[0];
+        J_p_to_q(0,3) = _landmark[0]*(-2)*_rotation[3]+_landmark[1]*(-2)*_rotation[0]+_landmark[2]*( 2)*_rotation[1];
 
-        J0(1,0) = distortion * yp;
-        J0(1,1) = focal * r2 * yp;
-        J0(1,2) = focal * r2 * r2 * yp;
-        J0(1,3) = focal * r2 * r2 * xp;
+        J_p_to_q(1,0) = _landmark[0]*( 2)*_rotation[3]+_landmark[1]*( 2)*_rotation[0]+_landmark[2]*(-2)*_rotation[1];
+        J_p_to_q(1,1) = _landmark[0]*( 2)*_rotation[2]+_landmark[1]*(-2)*_rotation[1]+_landmark[2]*(-2)*_rotation[0];
+        J_p_to_q(1,2) = _landmark[0]*( 2)*_rotation[1]+_landmark[1]*( 2)*_rotation[2]+_landmark[2]*( 2)*_rotation[3];
+        J_p_to_q(1,3) = _landmark[0]*( 2)*_rotation[0]+_landmark[1]*(-2)*_rotation[3]+_landmark[2]*( 2)*_rotation[2];
+
+        J_p_to_q(2,0) = _landmark[0]*(-2)*_rotation[2]+_landmark[1]*( 2)*_rotation[1]+_landmark[2]*( 2)*_rotation[0];
+        J_p_to_q(2,1) = _landmark[0]*( 2)*_rotation[3]+_landmark[1]*( 2)*_rotation[0]+_landmark[2]*(-2)*_rotation[1];
+        J_p_to_q(2,2) = _landmark[0]*(-2)*_rotation[0]+_landmark[1]*( 2)*_rotation[3]+_landmark[2]*(-2)*_rotation[2];
+        J_p_to_q(2,3) = _landmark[0]*( 2)*_rotation[1]+_landmark[1]*( 2)*_rotation[2]+_landmark[2]*( 2)*_rotation[3];
+
+        J0 = J_residual_to_p * J_p_to_q;
 
       }  
 
@@ -181,14 +199,8 @@ class ReprojectionError: public ceres::SizedCostFunction<
       if (jacobians[1] != NULL) {
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J1(jacobians[1]);       
 
-        J1(0,0) = -1.0/p[2];
-        J1(0,1) = 0;
-        J1(0,2) = p[0]/(p[2]*p[2]);
-
-        J1(1,0) = 0;
-        J1(1,1) = -1.0/p[2];
-        J1(1,2) = p[1]/(p[2]*p[2]);
-      }  
+        J1 = J_residual_to_p;
+      }
 
       // camera extrinsic
       if (jacobians[2] != NULL) {
@@ -201,20 +213,13 @@ class ReprojectionError: public ceres::SizedCostFunction<
         J2(1,0) = distortion * yp;
         J2(1,1) = focal * r2 * yp;
         J2(1,2) = focal * r2 * r2 * yp;
-
       }  
 
       // landmark
       if (jacobians[3] != NULL) {
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J3(jacobians[3]);     
 
-        J3(0,0) = distortion * xp;
-        J3(0,1) = focal * r2 * xp;
-        J3(0,2) = focal * r2 * r2 * xp;
-
-        J3(1,0) = distortion * yp;
-        J3(1,1) = focal * r2 * yp;
-        J3(1,2) = focal * r2 * r2 * yp;
+        J3 = J_residual_to_p * Eigen::Quaterniond(_rotation[0], _rotation[1], _rotation[2], _rotation[3]).toRotationMatrix();
       }      
     }
 
