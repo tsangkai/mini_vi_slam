@@ -146,7 +146,7 @@ class ReprojectionError: public ceres::SizedCostFunction<
     const double& l1 = _camera_ext[1];
     const double& l2 = _camera_ext[2];
     double r2 = xp*xp + yp*yp;
-    double distortion = 1.0 ; //+ r2  * (l1 + l2  * r2);
+    double distortion = 1.0 + r2  * (l1 + l2  * r2);
 
     // Compute final projected point position.
     const double& focal = _camera_ext[0];
@@ -158,27 +158,24 @@ class ReprojectionError: public ceres::SizedCostFunction<
     residuals[1] = predicted_y - observed_y;
 
 
-    // Jacobian Calculations
-    // rotation
+    // Jacobian Calculations         // TODO
+    if (jacobians != NULL) {
+      if (jacobians[0] != NULL) {
+         
+      }  
 
+      if (jacobians[1] != NULL) {
+         
+      }  
 
-    // translation
-    jacobians[1][0] = -1.0/p[2];  
-    jacobians[1][1] = 0;        
-    jacobians[1][2] = p[0]/(p[2]*p[2]);  
-    jacobians[1][3] = 0;  
-    jacobians[1][4] = -1.0/p[2]; ;  
-    jacobians[1][5] = p[1]/(p[2]*p[2]);   
+      if (jacobians[2] != NULL) {
+         
+      }  
 
-    // camera extrinsic
-    jacobians[2][0] = xp;  // residuals[0] / focal
-    jacobians[2][1] = 0;  // residuals[0] / 
-    jacobians[2][2] = 0;  // residuals[0] / 
-    jacobians[2][3] = yp;  // residuals[1] / focal
-    jacobians[2][4] = 0;  // residuals[1] / 
-    jacobians[2][5] = 0;  // residuals[1] / 
-
-
+      if (jacobians[3] != NULL) {
+         
+      }      
+    }
 
     return true;
 
