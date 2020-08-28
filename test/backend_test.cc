@@ -160,20 +160,61 @@ class ReprojectionError: public ceres::SizedCostFunction<
 
     // Jacobian Calculations         // TODO
     if (jacobians != NULL) {
+      // rotation
       if (jacobians[0] != NULL) {
-         
+        // hallucinate Jacobian w.r.t. state
+        Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);      
+
+        J0(0,0) = distortion * xp;
+        J0(0,1) = focal * r2 * xp;
+        J0(0,2) = focal * r2 * r2 * xp;
+        J0(0,3) = focal * r2 * r2 * xp;
+
+        J0(1,0) = distortion * yp;
+        J0(1,1) = focal * r2 * yp;
+        J0(1,2) = focal * r2 * r2 * yp;
+        J0(1,3) = focal * r2 * r2 * xp;
+
       }  
 
+      // translation
       if (jacobians[1] != NULL) {
-         
+        Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J1(jacobians[1]);       
+
+        J1(0,0) = -1.0/p[2];
+        J1(0,1) = 0;
+        J1(0,2) = p[0]/(p[2]*p[2]);
+
+        J1(1,0) = 0;
+        J1(1,1) = -1.0/p[2];
+        J1(1,2) = p[1]/(p[2]*p[2]);
       }  
 
+      // camera extrinsic
       if (jacobians[2] != NULL) {
-         
+        Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J2(jacobians[2]);       
+
+        J2(0,0) = distortion * xp;
+        J2(0,1) = focal * r2 * xp;
+        J2(0,2) = focal * r2 * r2 * xp;
+
+        J2(1,0) = distortion * yp;
+        J2(1,1) = focal * r2 * yp;
+        J2(1,2) = focal * r2 * r2 * yp;
+
       }  
 
+      // landmark
       if (jacobians[3] != NULL) {
-         
+        Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J3(jacobians[3]);     
+
+        J3(0,0) = distortion * xp;
+        J3(0,1) = focal * r2 * xp;
+        J3(0,2) = focal * r2 * r2 * xp;
+
+        J3(1,0) = distortion * yp;
+        J3(1,1) = focal * r2 * yp;
+        J3(1,2) = focal * r2 * r2 * yp;
       }      
     }
 
