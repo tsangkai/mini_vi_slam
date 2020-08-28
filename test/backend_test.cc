@@ -108,6 +108,88 @@ struct SnavelyReprojectionError {
 };
 
 
+class ReprojectionError: public ceres::SizedCostFunction<
+    2,  // number of residuals
+    4,  // size of rotation parameter
+    3,  // size of translation parameter
+    3,  // size of camera extrinsic parameter
+    3  // size of landmark position
+    > {
+ public:
+
+  ReprojectionError(double observed_x, double observed_y)
+      : observed_x(observed_x), observed_y(observed_y) {}
+
+  bool Evaluate(double const* const* parameters,
+                double* residuals,
+                double** jacobians) const {
+
+    double const* _rotation = parameters[0];
+    double const* _translation = parameters[1];
+    double const* _camera_ext = parameters[2];
+    double const* _landmark = parameters[3];
+
+    double p[3];
+    ceres::QuaternionRotatePoint(_rotation, _landmark, p);
+
+    p[0] += _translation[0];
+    p[1] += _translation[1];
+    p[2] += _translation[2];
+
+    // Compute the center of distortion. The sign change comes from
+    // the camera model that Noah Snavely's Bundler assumes, whereby
+    // the camera coordinate system has a negative z axis.
+    double xp = - p[0] / p[2];
+    double yp = - p[1] / p[2];
+
+    // Apply second and fourth order radial distortion.
+    const double& l1 = _camera_ext[1];
+    const double& l2 = _camera_ext[2];
+    double r2 = xp*xp + yp*yp;
+    double distortion = 1.0 ; //+ r2  * (l1 + l2  * r2);
+
+    // Compute final projected point position.
+    const double& focal = _camera_ext[0];
+    double predicted_x = focal * distortion * xp;
+    double predicted_y = focal * distortion * yp;
+
+    // The error is the difference between the predicted and observed position.
+    residuals[0] = predicted_x - observed_x;
+    residuals[1] = predicted_y - observed_y;
+
+
+    // Jacobian Calculations
+    // rotation
+
+
+    // translation
+    jacobians[1][0] = -1.0/p[2];  
+    jacobians[1][1] = 0;        
+    jacobians[1][2] = p[0]/(p[2]*p[2]);  
+    jacobians[1][3] = 0;  
+    jacobians[1][4] = -1.0/p[2]; ;  
+    jacobians[1][5] = p[1]/(p[2]*p[2]);   
+
+    // camera extrinsic
+    jacobians[2][0] = xp;  // residuals[0] / focal
+    jacobians[2][1] = 0;  // residuals[0] / 
+    jacobians[2][2] = 0;  // residuals[0] / 
+    jacobians[2][3] = yp;  // residuals[1] / focal
+    jacobians[2][4] = 0;  // residuals[1] / 
+    jacobians[2][5] = 0;  // residuals[1] / 
+
+
+
+    return true;
+
+
+  }
+
+ private:
+  double observed_x;
+  double observed_y;
+};
+
 // Read a Bundle Adjustment in the Large dataset.
 class BALProblem {
 
@@ -155,9 +237,13 @@ class BALProblem {
       for (int j = 0; j < 2; ++j)
         FscanfOrDie(fptr, "%lf", _observation + j);
 
+      /***
       ceres::CostFunction* cost_function =
-        SnavelyReprojectionError::Create(_observation[0],
-                                         _observation[1]);
+          SnavelyReprojectionError::Create(_observation[0],
+                                           _observation[1]);
+      ***/
+
+      ceres::CostFunction* cost_function = new ReprojectionError(_observation[0], _observation[1]);
 
       optimization_problem_.AddResidualBlock(cost_function,
                                NULL,
