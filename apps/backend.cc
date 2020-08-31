@@ -5,85 +5,87 @@
 #include <string>
 #include <vector>
 
+#include <ceres/ceres.h>
+#include <ceres/rotation.h>
 #include <opencv2/core/core.hpp>
 #include <Eigen/Core>
 
 
-#define TIME_WINDOW_BEGIN  "1403636649313555456"
-#define TIME_WINDOW_END    "1403636658963555584"
+// TODO: avoid data conversion
+double ConverStrTime(std::string time_str) {
+  std::string time_str_sec = time_str.substr(7,3);       // second
+  std::string time_str_nano_sec = time_str.substr(10);   // nano-second
+
+  return std::stoi(time_str_sec) + std::stoi(time_str_nano_sec)*1e-9;
+}
+
+class ExpLandmarkOptSLAM {
+
+ public:
 
 
 
+  bool readConfigurationFiles(std::string config_folder_path) {
 
-size_t read_csv(std::string filename){
+    // test configuration file
+    cv::FileStorage test_config_file(config_folder_path + "test.yaml", cv::FileStorage::READ);
+    time_begin_ = ConverStrTime(test_config_file["time_window"][0]);  
+    time_end_ = ConverStrTime(test_config_file["time_window"][1]);  
 
-  size_t line_count = 0;
 
-  // Create an input filestream
-  std::ifstream input_file(filename);
+    // experiment configuration file
+    cv::FileStorage experiment_config_file(config_folder_path + "config_fpga_p2_euroc.yaml", cv::FileStorage::READ);
 
-  // Make sure the file is open
-  if(!input_file.is_open()) 
-    throw std::runtime_error("Could not open file");
+    cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];  // from camera frame to body frame
 
-  // Read the column names
-  // Extract the first line in the file
-  std::string line;
-  std::getline(input_file, line);
+    T_BC_ << T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 
+             T_BC_node[4],  T_BC_node[5],  T_BC_node[6],  T_BC_node[7], 
+             T_BC_node[8],  T_BC_node[9],  T_BC_node[10], T_BC_node[11], 
+             T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
 
-  // Read data, line by line
-  while(std::getline(input_file, line)) {
-    // Create a stringstream of the current line
-    std::stringstream s_stream(line);
+    double focal_length_0 = experiment_config_file["cameras"][0]["focal_length"][0];  // i don't know the unit!!!!
+    double focal_length_1 = experiment_config_file["cameras"][0]["focal_length"][1];
+    focal_length_ = 0.5*focal_length_0 + 0.5*focal_length_1;
 
-    if(s_stream.good()) {
-      std::string time_stamp_str;
-      std::getline(s_stream, time_stamp_str, ','); //get first string delimited by comma
-      
-      if(TIME_WINDOW_BEGIN <= time_stamp_str && time_stamp_str <= TIME_WINDOW_END) {
-        ++line_count;
-      }
-    }
+    principal_point_[0] = experiment_config_file["cameras"][0]["principal_point"][0];
+    principal_point_[1] = experiment_config_file["cameras"][0]["principal_point"][1];
+    
+    return 1;
   }
 
-  // Close file
-  input_file.close();
 
-  return line_count;
-}
+ private:
+
+
+  double time_begin_;
+  double time_end_;
+
+  // camera parameters
+  Eigen::Matrix4d T_BC_; // from camera frame to body frame
+  double focal_length_;
+  double principal_point_[2];
+
+  // data storage
+
+  // ceres parameter
+
+
+};
+
+
 
 int main(int argc, char **argv) {
 
-  /*** Step 1. Read files ***/
+  /*** Step 0. Configuration files ***/
 
-  std::string ground_truth_path("../../../dataset/mav0/state_groundtruth_estimate0/data.csv");
-  size_t line_count_ground_truth = read_csv(ground_truth_path);
-  
-  std::cout << "ground truth: " << line_count_ground_truth << std::endl;
+  ExpLandmarkOptSLAM slam_problem;
 
-
-  std::string imu_path("../../../dataset/mav0/imu0/data.csv");
-  size_t line_count_imu = read_csv(imu_path);
-  
-  std::cout << "imu: " << line_count_imu << std::endl;
+  std::string config_folder_path("../config/");
+  slam_problem.readConfigurationFiles(config_folder_path);
 
 
-  std::string observation_path("feature_observation.csv");
-  size_t line_count_observation = read_csv(observation_path);
-  
-  std::cout << "feature observation: " << line_count_observation << std::endl;
+  /*** Step 1. Datasets ***/
 
-
-  // for yaml file
-  std::string camera_calib_path("../config/config_fpga_p2_euroc.yaml");
-  cv::FileStorage camera_calib_file(camera_calib_path, cv::FileStorage::READ);
-
-  cv::FileNode T_BS_ = camera_calib_file["cameras"][0]["T_SC"];  // from camera frame to body frame
-
-  Eigen::Matrix4d T_BS_e;
-  T_BS_e << T_BS_[0], T_BS_[1], T_BS_[2], T_BS_[3], T_BS_[4], T_BS_[5], T_BS_[6], T_BS_[7], T_BS_[8], T_BS_[9], T_BS_[10], T_BS_[11], T_BS_[12], T_BS_[13], T_BS_[14], T_BS_[15];
-
-  std::cout << T_BS_e << std::endl;
 
   /*** Step 2. Construct state ***/
 
