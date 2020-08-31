@@ -69,7 +69,7 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] timestamp The timestamp of this state.
   TimedQuatParameterBlock(const Eigen::Quaterniond& quat, uint64_t id, 
-                          const uint64_t timestamp) {
+                          const double timestamp) {
     setEstimate(quat);
     setId(id);
     setTimestamp(timestamp);
@@ -92,7 +92,7 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
 
 
   /// @param[in] timestamp The timestamp of this state.
-  void setTimestamp(const uint64_t timestamp){timestamp_=timestamp;}
+  void setTimestamp(const double timestamp){timestamp_=timestamp;}
 
   // getters
   /// @brief Get estimate.
@@ -103,7 +103,7 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
 
   /// \brief Get the time.
   /// \return The timestamp of this state.
-  uint64_t timestamp() const {return timestamp_;}
+  double timestamp() const {return timestamp_;}
 
   // minimal internal parameterization
   // x0_plus_Delta=Delta_Chi[+]x0
@@ -146,7 +146,7 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   virtual std::string typeInfo() const {return "TimedQuatParameterBlock";}
 
 private:
-  uint64_t timestamp_; ///< Time of this state.
+  double timestamp_; ///< Time of this state.
 };
 
 // } // namespace ceres
