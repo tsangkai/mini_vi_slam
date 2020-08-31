@@ -10,6 +10,10 @@
 #include <opencv2/core/core.hpp>
 #include <Eigen/Core>
 
+#include "SizedParameterBlock.h"
+#include "LandmarkParameterBlock.h"
+#include "Timed3dParameterBlock.h"
+#include "TimedQuatParameterBlock.h"
 
 // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
@@ -22,8 +26,6 @@ double ConverStrTime(std::string time_str) {
 class ExpLandmarkOptSLAM {
 
  public:
-
-
 
   bool readConfigurationFiles(std::string config_folder_path) {
 
@@ -53,10 +55,79 @@ class ExpLandmarkOptSLAM {
     return 1;
   }
 
+  bool readInitialCondition(std::string ground_truth_file_path) {
+
+    std::ifstream input_file(ground_truth_file_path);
+    
+    if(!input_file.is_open()) 
+      throw std::runtime_error("Could not open file");
+
+    // Read the column names
+    // Extract the first line in the file
+    std::string line;
+    std::getline(input_file, line);
+
+    while (std::getline(input_file, line)) {
+      std::stringstream s_stream(line);                // Create a stringstream of the current line
+
+      if (s_stream.good()) {
+        std::string time_stamp_str;
+        std::getline(s_stream, time_stamp_str, ',');   // get first string delimited by comma
+      
+        if (time_begin_ <= ConverStrTime(time_stamp_str)) {
+
+          // position
+          std::string initial_position_str[3];
+          for (int i=0; i<3; ++i) {                    
+            std::getline(s_stream, initial_position_str[i], ','); 
+            std::cout << std::stod(initial_position_str[i]) << std::endl;
+          }
+
+          Eigen::Vector3d initial_position(std::stod(initial_position_str[0]), std::stod(initial_position_str[1]), std::stod(initial_position_str[2]));
+          position_parameter_.push_back(Timed3dParameterBlock(initial_position, 0, std::stod(time_stamp_str)));
+          optimization_problem_.AddParameterBlock(position_parameter_.at(0).parameters(), 3);
+          optimization_problem_.SetParameterBlockConstant(position_parameter_.at(0).parameters());
+
+          // rotation
+          std::string initial_rotation_str[4];
+          for (int i=0; i<4; ++i) {                    
+            std::getline(s_stream, initial_rotation_str[i], ','); 
+            std::cout << std::stod(initial_rotation_str[i]) << std::endl;
+          }
+
+          Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
+          rotation_parameter_.push_back(TimedQuatParameterBlock(initial_rotation, 0, std::stod(time_stamp_str)));
+          optimization_problem_.AddParameterBlock(rotation_parameter_.at(0).parameters(), 4);
+          optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(0).parameters());
+
+          // velocity
+          std::string initial_velocity_str[3];
+          for (int i=0; i<3; ++i) {                    
+            std::getline(s_stream, initial_velocity_str[i], ','); 
+            std::cout << std::stod(initial_velocity_str[i]) << std::endl;
+          }
+
+          Eigen::Vector3d initial_velocity(std::stod(initial_velocity_str[0]), std::stod(initial_velocity_str[1]), std::stod(initial_velocity_str[2]));
+          velocity_parameter_.push_back(Timed3dParameterBlock(initial_velocity, 0, std::stod(time_stamp_str)));
+          optimization_problem_.AddParameterBlock(velocity_parameter_.at(0).parameters(), 3);
+          optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(0).parameters());
+
+          return 1;
+        }
+      }
+    }
+
+    std::cout << "Initialization fails!" << std::endl;
+    return 0;
+  }  
+
+
+  bool readIMUData(std::string imu_file_path) {
+  
+    return 1;
+  }
 
  private:
-
-
   double time_begin_;
   double time_end_;
 
@@ -66,8 +137,18 @@ class ExpLandmarkOptSLAM {
   double principal_point_[2];
 
   // data storage
+  std::vector<TimedQuatParameterBlock> rotation_parameter_;
+  std::vector<Timed3dParameterBlock> position_parameter_;
+  std::vector<Timed3dParameterBlock> velocity_parameter_;
+  double accel_bias_parameter_[3];
+  double gyro_bias_parameter_[3];
+
+  std::vector<LandmarkParameterBlock> landmark_parameter_;
 
   // ceres parameter
+  ceres::Problem optimization_problem_;
+  ceres::Solver::Options optimization_options_;
+  ceres::Solver::Summary optimization_summary_;
 
 
 };
@@ -80,20 +161,21 @@ int main(int argc, char **argv) {
 
   ExpLandmarkOptSLAM slam_problem;
 
-  std::string config_folder_path("../config/");
+  std::string config_folder_path = "../config/";
   slam_problem.readConfigurationFiles(config_folder_path);
 
 
   /*** Step 1. Datasets ***/
+  std::string euroc_dataset_path = "../../../dataset/mav0/";
+  std::string ground_truth_file_path = euroc_dataset_path + "state_groundtruth_estimate0/data.csv";
+  slam_problem.readInitialCondition(ground_truth_file_path);
 
+  std::string imu_file_path = euroc_dataset_path + "imu0/data.csv";
+  slam_problem.readIMUData(imu_file_path);
 
-  /*** Step 2. Construct state ***/
+  std::string observation_file_path = "feature_observation.csv";
+  // slam_problem.readObservationData(observation_file_path);
 
-
-
-  /*** Step 3. Convert to the optmization problem ***/
-
-  // ceres
 
   return 0;
 }
