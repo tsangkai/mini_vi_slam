@@ -51,7 +51,7 @@
 #include "Timed3dParameterBlock.h"
 #include "TimedQuatParameterBlock.h"
 
-
+/***
 struct SnavelyReprojectionError {
   SnavelyReprojectionError(double observed_x, double observed_y)
       : observed_x(observed_x), observed_y(observed_y) {}
@@ -106,7 +106,7 @@ struct SnavelyReprojectionError {
   double observed_x;
   double observed_y;
 };
-
+***/
 
 class ReprojectionError: public ceres::SizedCostFunction<
     2,  // number of residuals
@@ -158,7 +158,7 @@ class ReprojectionError: public ceres::SizedCostFunction<
     residuals[1] = predicted_y - observed_y;
 
 
-    // Jacobian Calculations         // TODO
+    // Jacobian Calculations
     if (jacobians != NULL) {
       
       // chain rule
@@ -344,16 +344,13 @@ class BALProblem {
     // standard solver, SPARSE_NORMAL_CHOLESKY, also works fine but it is slower
     // for standard bundle adjustment problems.
 
-    ceres::Solver::Options options;
-    options.linear_solver_type = ceres::DENSE_SCHUR;
-    options.minimizer_progress_to_stdout = true;
+    optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
+    optimization_options_.minimizer_progress_to_stdout = true;
 
-    ceres::Solver::Summary summary;
-    ceres::Solve(options, &optimization_problem_, &summary);
-    std::cout << summary.FullReport() << "\n";
+    ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
+    std::cout << optimization_summary_.FullReport() << "\n";
 
     return true;
-
   }
 
  private:
@@ -372,6 +369,8 @@ class BALProblem {
   int num_observations_;
 
   ceres::Problem optimization_problem_;
+  ceres::Solver::Options optimization_options_;
+  ceres::Solver::Summary optimization_summary_;
 
   std::vector<TimedQuatParameterBlock> rotation_parameter_;
   std::vector<Timed3dParameterBlock> translation_parameter_;
