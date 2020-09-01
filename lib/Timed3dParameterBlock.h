@@ -89,7 +89,9 @@ class Timed3dParameterBlock : public SizedParameterBlock<3, 3, Eigen::Vector3d> 
   }
   
   /// @param[in] timestamp The timestamp of this state.
-  void setTimestamp(const double timestamp){timestamp_=timestamp;}
+  void setTimestamp(const double timestamp){
+    timestamp_=timestamp;
+  }
 
   // getters
   /// @brief Get estimate.
@@ -99,7 +101,9 @@ class Timed3dParameterBlock : public SizedParameterBlock<3, 3, Eigen::Vector3d> 
   }
   /// \brief Get the time.
   /// \return The timestamp of this state.
-  double timestamp() const {return timestamp_;}
+  double timestamp() const {
+    return timestamp_;
+  }
 
   // minimal internal parameterization
   // x0_plus_Delta=Delta_Chi[+]x0

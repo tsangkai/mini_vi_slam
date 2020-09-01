@@ -144,6 +144,148 @@ class ImuError :
     _r_rotation = _rotation_t1 * ( _rotation_t * Eigen::Quaterniond(1, 0.5*dt_*gyro_measurement_(0), 0.5*dt_*gyro_measurement_(1), 0.5*dt_*gyro_measurement_(2))).inverse();
     
 
+
+    /*********************************************************************************
+
+                 Jacobian
+
+    *********************************************************************************/
+
+    if (jacobians != NULL) {
+      
+      Eigen::MatrixXd J_p_to_q(3,4);
+      J_p_to_q(0,0) = accel_measurement_(0)*( 2)*_rotation_t.w()+accel_measurement_(1)*(-2)*_rotation_t.z()+accel_measurement_(2)*( 2)*_rotation_t.y();
+      J_p_to_q(0,1) = accel_measurement_(0)*( 2)*_rotation_t.x()+accel_measurement_(1)*( 2)*_rotation_t.y()+accel_measurement_(2)*( 2)*_rotation_t.z();
+      J_p_to_q(0,2) = accel_measurement_(0)*(-2)*_rotation_t.y()+accel_measurement_(1)*( 2)*_rotation_t.x()+accel_measurement_(2)*( 2)*_rotation_t.w();
+      J_p_to_q(0,3) = accel_measurement_(0)*(-2)*_rotation_t.z()+accel_measurement_(1)*(-2)*_rotation_t.w()+accel_measurement_(2)*( 2)*_rotation_t.x();
+
+      J_p_to_q(1,0) = accel_measurement_(0)*( 2)*_rotation_t.z()+accel_measurement_(1)*( 2)*_rotation_t.w()+accel_measurement_(2)*(-2)*_rotation_t.x();
+      J_p_to_q(1,1) = accel_measurement_(0)*( 2)*_rotation_t.y()+accel_measurement_(1)*(-2)*_rotation_t.x()+accel_measurement_(2)*(-2)*_rotation_t.w();
+      J_p_to_q(1,2) = accel_measurement_(0)*( 2)*_rotation_t.x()+accel_measurement_(1)*( 2)*_rotation_t.y()+accel_measurement_(2)*( 2)*_rotation_t.z();
+      J_p_to_q(1,3) = accel_measurement_(0)*( 2)*_rotation_t.w()+accel_measurement_(1)*(-2)*_rotation_t.z()+accel_measurement_(2)*( 2)*_rotation_t.y();
+
+      J_p_to_q(2,0) = accel_measurement_(0)*(-2)*_rotation_t.y()+accel_measurement_(1)*( 2)*_rotation_t.x()+accel_measurement_(2)*( 2)*_rotation_t.w();
+      J_p_to_q(2,1) = accel_measurement_(0)*( 2)*_rotation_t.z()+accel_measurement_(1)*( 2)*_rotation_t.w()+accel_measurement_(2)*(-2)*_rotation_t.x();
+      J_p_to_q(2,2) = accel_measurement_(0)*(-2)*_rotation_t.w()+accel_measurement_(1)*( 2)*_rotation_t.z()+accel_measurement_(2)*(-2)*_rotation_t.y();
+      J_p_to_q(2,3) = accel_measurement_(0)*( 2)*_rotation_t.x()+accel_measurement_(1)*( 2)*_rotation_t.y()+accel_measurement_(2)*( 2)*_rotation_t.z();
+
+
+      // position_t1
+      if (jacobians[0] != NULL) {
+
+        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_p_t1(jacobians[0]);      
+
+        for (size_t i=0; i<10; ++i) {
+          for (size_t j=0; j<3; ++j) {
+            J_p_t1(i,j) = 0.0;
+          }
+        }
+
+        J_p_t1(0,0) = 1.0;
+        J_p_t1(1,1) = 1.0;
+        J_p_t1(2,2) = 1.0;
+
+      }  
+
+      // velocity_t1
+      if (jacobians[1] != NULL) {
+
+        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_v_t1(jacobians[1]);      
+
+        for (size_t i=0; i<10; ++i) {
+          for (size_t j=0; j<3; ++j) {
+            J_v_t1(i,j) = 0.0;
+          }
+        }
+
+        J_v_t1(3,0) = 1.0;
+        J_v_t1(4,1) = 1.0;
+        J_v_t1(5,2) = 1.0;
+      }  
+
+      // rotation_t1
+      if (jacobians[2] != NULL) {
+
+        Eigen::Map<Eigen::Matrix<double, 10, 4, Eigen::RowMajor> > J_q_t1(jacobians[2]);      
+
+        for (size_t i=0; i<10; ++i) {
+          for (size_t j=0; j<4; ++j) {
+            J_q_t1(i,j) = 0.0;
+          }
+        }
+
+        J_q_t1(6,0) = 1.0;
+        J_q_t1(7,1) = 1.0;
+        J_q_t1(8,2) = 1.0;
+        J_q_t1(9,3) = 1.0;
+      }  
+
+      // position_t
+      if (jacobians[3] != NULL) {
+
+        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_p_t(jacobians[3]);      
+
+        for (size_t i=0; i<10; ++i) {
+          for (size_t j=0; j<3; ++j) {
+            J_p_t(i,j) = 0.0;
+          }
+        }
+
+        J_p_t(0,0) = -1.0;
+        J_p_t(1,1) = -1.0;
+        J_p_t(2,2) = -1.0;
+      }  
+
+      // velocity_t
+      if (jacobians[4] != NULL) {
+
+        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_v_t(jacobians[4]);      
+
+        for (size_t i=0; i<10; ++i) {
+          for (size_t j=0; j<3; ++j) {
+            J_v_t(i,j) = 0.0;
+          }
+        }
+
+        J_v_t(1,0) = -dt_;
+        J_v_t(2,1) = -dt_;
+        J_v_t(3,2) = -dt_;
+
+        J_v_t(3,0) = -1.0;
+        J_v_t(4,1) = -1.0;
+        J_v_t(5,2) = -1.0;
+      }  
+
+      // rotation_t
+      if (jacobians[5] != NULL) {
+        Eigen::Map<Eigen::Matrix<double, 10, 4, Eigen::RowMajor> > J_q_t(jacobians[5]);      
+
+        for (size_t i=0; i<10; ++i) {
+          for (size_t j=0; j<4; ++j) {
+            J_q_t(i,j) = 0.0;
+          }
+        }
+
+        J_q_t(6,0) = -1.0;
+        J_q_t(7,1) = -1.0;
+        J_q_t(8,2) = -1.0;
+        J_q_t(9,3) = -1.0;        
+
+        for (size_t i=0; i<3; ++i) {
+          for (size_t j=0; j<4; ++j) {
+            J_q_t(i,j) = -(0.5*dt_*dt_) * J_p_to_q(i,j);
+            J_q_t(3+i,j) = -(dt_) * J_p_to_q(i,j);
+          }
+        }
+
+      }  
+
+
+
+    }
+
+
+
     return 1;
   }
 
@@ -176,8 +318,6 @@ class ImuError :
   // measurements
   Eigen::Vector3d gyro_measurement_;
   Eigen::Vector3d accel_measurement_; 
-
-
 
   // times
   double dt_;

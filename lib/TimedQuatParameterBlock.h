@@ -105,7 +105,9 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
 
   /// \brief Get the time.
   /// \return The timestamp of this state.
-  double timestamp() const {return timestamp_;}
+  double timestamp() const {
+    return timestamp_;
+  }
 
   // minimal internal parameterization
   // x0_plus_Delta=Delta_Chi[+]x0

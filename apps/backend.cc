@@ -14,6 +14,8 @@
 #include "Timed3dParameterBlock.h"
 #include "TimedQuatParameterBlock.h"
 #include "ImuError.h"
+// #include "TestImuError.h"
+
 
 // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
@@ -67,6 +69,7 @@ class IMUData {
 };
 
 class ExpLandmarkOptSLAM {
+ EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
  public:
 
@@ -118,7 +121,6 @@ class ExpLandmarkOptSLAM {
         std::getline(s_stream, time_stamp_str, ',');   // get first string delimited by comma
       
         if (time_begin_ <= ConverStrTime(time_stamp_str)) {
-
           // position
           std::string initial_position_str[3];
           for (int i=0; i<3; ++i) {                    
@@ -126,7 +128,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_position(std::stod(initial_position_str[0]), std::stod(initial_position_str[1]), std::stod(initial_position_str[2]));
-          position_parameter_.push_back(Timed3dParameterBlock(initial_position, 0, std::stod(time_stamp_str)));
+          position_parameter_.push_back(Timed3dParameterBlock(initial_position, 0, ConverStrTime(time_stamp_str)));
           optimization_problem_.AddParameterBlock(position_parameter_.at(0).parameters(), 3);
           optimization_problem_.SetParameterBlockConstant(position_parameter_.at(0).parameters());
 
@@ -137,7 +139,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
-          rotation_parameter_.push_back(TimedQuatParameterBlock(initial_rotation, 0, std::stod(time_stamp_str)));
+          rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), 0, ConverStrTime(time_stamp_str)));
           optimization_problem_.AddParameterBlock(rotation_parameter_.at(0).parameters(), 4);
           optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(0).parameters());
 
@@ -148,7 +150,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_velocity(std::stod(initial_velocity_str[0]), std::stod(initial_velocity_str[1]), std::stod(initial_velocity_str[2]));
-          velocity_parameter_.push_back(Timed3dParameterBlock(initial_velocity, 0, std::stod(time_stamp_str)));
+          velocity_parameter_.push_back(Timed3dParameterBlock(initial_velocity, 0, ConverStrTime(time_stamp_str)));
           optimization_problem_.AddParameterBlock(velocity_parameter_.at(0).parameters(), 3);
           optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(0).parameters());
 
@@ -184,12 +186,15 @@ class ExpLandmarkOptSLAM {
 
       if (time_begin_ <= imu_data.getTimeStamp() && imu_data.getTimeStamp() <= time_end_) {
 
+
         position_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), num_of_imu, imu_data.getTimeStamp()));
         velocity_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), num_of_imu, imu_data.getTimeStamp()));
         rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), num_of_imu, imu_data.getTimeStamp()));
-        // explicitly put addParameterBlock() here induces error!
+
+
 
         double time_diff = position_parameter_.at(num_of_imu).timestamp() - position_parameter_.at(num_of_imu-1).timestamp();
+
         ceres::CostFunction* cost_function = new ImuError(imu_data.getGyroMeasurement(),
                                                           imu_data.getAccelMeasurement(),
                                                           time_diff);
@@ -203,25 +208,35 @@ class ExpLandmarkOptSLAM {
                                                velocity_parameter_.at(num_of_imu-1).parameters(),
                                                rotation_parameter_.at(num_of_imu-1).parameters());
 
-
         ++num_of_imu;
       }
     }
 
-    std::cout << num_of_imu << std::endl;
-    std::cout << position_parameter_.size() << std::endl;
-    std::cout << rotation_parameter_.size() << std::endl;
-    std::cout << velocity_parameter_.size() << std::endl;
-
-    return 1;
+    return true;
   }
+
+
+  bool solveOptimizationProblem() {
+    // Make Ceres automatically detect the bundle structure. Note that the
+    // standard solver, SPARSE_NORMAL_CHOLESKY, also works fine but it is slower
+    // for standard bundle adjustment problems.
+
+    optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
+    optimization_options_.minimizer_progress_to_stdout = true;
+
+    ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
+    std::cout << optimization_summary_.FullReport() << "\n";
+
+    return true;
+  }
+
 
  private:
   double time_begin_;
   double time_end_;
 
   // camera parameters
-  Eigen::Matrix4d T_BC_; // from camera frame to body frame
+  Eigen::Matrix4d T_BC_;    // from camera frame to body frame
   double focal_length_;
   double principal_point_[2];
 
@@ -264,6 +279,7 @@ int main(int argc, char **argv) {
 
   std::string observation_file_path = "feature_observation.csv";
   // slam_problem.readObservationData(observation_file_path);
+
 
 
   return 0;
