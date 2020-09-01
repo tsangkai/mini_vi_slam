@@ -4,6 +4,7 @@ add_library(backend_lib STATIC
   LandmarkParameterBlock.h
   Timed3dParameterBlock.h
   TimedQuatParameterBlock.h
+  ImuError.h
 )
 
 target_include_directories(backend_lib

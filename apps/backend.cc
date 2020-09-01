@@ -10,10 +10,10 @@
 #include <opencv2/core/core.hpp>
 #include <Eigen/Core>
 
-#include "SizedParameterBlock.h"
 #include "LandmarkParameterBlock.h"
 #include "Timed3dParameterBlock.h"
 #include "TimedQuatParameterBlock.h"
+#include "ImuError.h"
 
 // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
@@ -22,6 +22,49 @@ double ConverStrTime(std::string time_str) {
 
   return std::stoi(time_str_sec) + std::stoi(time_str_nano_sec)*1e-9;
 }
+
+class IMUData {
+ EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+ public:
+  IMUData(std::string imu_data_str) {
+    std::stringstream str_stream(imu_data_str);          // Create a stringstream of the current line
+
+    if (str_stream.good()) {
+        
+      std::string data_str;
+      std::getline(str_stream, data_str, ',');   // get first string delimited by comma
+      timestamp_ = ConverStrTime(data_str);
+
+      for (int i=0; i<3; ++i) {                    
+        std::getline(str_stream, data_str, ','); 
+        gyro_(i) = std::stod(data_str);
+      }
+
+      for (int i=0; i<3; ++i) {                    
+        std::getline(str_stream, data_str, ','); 
+        accel_(i) = std::stod(data_str);
+      }
+    }
+  }
+
+  double getTimeStamp() {
+    return timestamp_;
+  }
+
+  Eigen::Vector3d getGyroMeasurement() {
+    return gyro_;
+  }
+
+  Eigen::Vector3d getAccelMeasurement() {
+    return accel_;
+  }
+
+ private:
+  double timestamp_;
+  Eigen::Vector3d gyro_;
+  Eigen::Vector3d accel_; 
+};
 
 class ExpLandmarkOptSLAM {
 
@@ -80,7 +123,6 @@ class ExpLandmarkOptSLAM {
           std::string initial_position_str[3];
           for (int i=0; i<3; ++i) {                    
             std::getline(s_stream, initial_position_str[i], ','); 
-            std::cout << std::stod(initial_position_str[i]) << std::endl;
           }
 
           Eigen::Vector3d initial_position(std::stod(initial_position_str[0]), std::stod(initial_position_str[1]), std::stod(initial_position_str[2]));
@@ -92,7 +134,6 @@ class ExpLandmarkOptSLAM {
           std::string initial_rotation_str[4];
           for (int i=0; i<4; ++i) {                    
             std::getline(s_stream, initial_rotation_str[i], ','); 
-            std::cout << std::stod(initial_rotation_str[i]) << std::endl;
           }
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
@@ -104,7 +145,6 @@ class ExpLandmarkOptSLAM {
           std::string initial_velocity_str[3];
           for (int i=0; i<3; ++i) {                    
             std::getline(s_stream, initial_velocity_str[i], ','); 
-            std::cout << std::stod(initial_velocity_str[i]) << std::endl;
           }
 
           Eigen::Vector3d initial_velocity(std::stod(initial_velocity_str[0]), std::stod(initial_velocity_str[1]), std::stod(initial_velocity_str[2]));
@@ -124,7 +164,54 @@ class ExpLandmarkOptSLAM {
 
   bool readIMUData(std::string imu_file_path) {
   
+
+    std::ifstream input_file(imu_file_path);
     
+    if(!input_file.is_open()) 
+      throw std::runtime_error("Could not open file");
+
+    // Read the column names
+    // Extract the first line in the file
+    std::string first_line_data_str;
+    std::getline(input_file, first_line_data_str);
+
+    size_t num_of_imu = 1;
+
+    std::string imu_data_str;
+    while (std::getline(input_file, imu_data_str)) {
+
+      IMUData imu_data(imu_data_str);
+
+      if (time_begin_ <= imu_data.getTimeStamp() && imu_data.getTimeStamp() <= time_end_) {
+
+        position_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), num_of_imu, imu_data.getTimeStamp()));
+        velocity_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), num_of_imu, imu_data.getTimeStamp()));
+        rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), num_of_imu, imu_data.getTimeStamp()));
+        // explicitly put addParameterBlock() here induces error!
+
+        double time_diff = position_parameter_.at(num_of_imu).timestamp() - position_parameter_.at(num_of_imu-1).timestamp();
+        ceres::CostFunction* cost_function = new ImuError(imu_data.getGyroMeasurement(),
+                                                          imu_data.getAccelMeasurement(),
+                                                          time_diff);
+
+        optimization_problem_.AddResidualBlock(cost_function,
+                                               NULL,
+                                               position_parameter_.at(num_of_imu).parameters(),
+                                               velocity_parameter_.at(num_of_imu).parameters(),
+                                               rotation_parameter_.at(num_of_imu).parameters(),
+                                               position_parameter_.at(num_of_imu-1).parameters(),
+                                               velocity_parameter_.at(num_of_imu-1).parameters(),
+                                               rotation_parameter_.at(num_of_imu-1).parameters());
+
+
+        ++num_of_imu;
+      }
+    }
+
+    std::cout << num_of_imu << std::endl;
+    std::cout << position_parameter_.size() << std::endl;
+    std::cout << rotation_parameter_.size() << std::endl;
+    std::cout << velocity_parameter_.size() << std::endl;
 
     return 1;
   }

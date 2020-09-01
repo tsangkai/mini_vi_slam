@@ -92,7 +92,9 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
 
 
   /// @param[in] timestamp The timestamp of this state.
-  void setTimestamp(const double timestamp){timestamp_=timestamp;}
+  void setTimestamp(const double timestamp){
+    timestamp_=timestamp;
+  }
 
   // getters
   /// @brief Get estimate.
