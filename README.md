@@ -1,4 +1,4 @@
-# Mini VI SLAM
+# Mini Visual-Inertial SLAM
 
 
 ### Build instruction
