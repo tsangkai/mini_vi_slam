@@ -371,6 +371,9 @@ class ExpLandmarkOptSLAM {
 
 int main(int argc, char **argv) {
 
+  google::InitGoogleLogging(argv[0]);
+
+
   /*** Step 0. Configuration files ***/
   ExpLandmarkOptSLAM slam_problem;
 
