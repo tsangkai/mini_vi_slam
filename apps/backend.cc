@@ -177,7 +177,8 @@ class ExpLandmarkOptSLAM {
     std::string first_line_data_str;
     std::getline(input_file, first_line_data_str);
 
-    size_t num_of_imu = 1;
+
+    std::vector<IMUData> imu_data_vec;
 
     std::string imu_data_str;
     while (std::getline(input_file, imu_data_str)) {
@@ -186,30 +187,46 @@ class ExpLandmarkOptSLAM {
 
       if (time_begin_ <= imu_data.getTimeStamp() && imu_data.getTimeStamp() <= time_end_) {
 
+        imu_data_vec.push_back(imu_data);
 
-        position_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), num_of_imu, imu_data.getTimeStamp()));
-        velocity_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), num_of_imu, imu_data.getTimeStamp()));
-        rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), num_of_imu, imu_data.getTimeStamp()));
+        if (imu_data_vec.size()>1) {
+          position_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), imu_data_vec.size()-1, imu_data.getTimeStamp()));
+          velocity_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), imu_data_vec.size()-1, imu_data.getTimeStamp()));
+          rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), imu_data_vec.size()-1, imu_data.getTimeStamp()));
+        }
 
-
-
-        double time_diff = position_parameter_.at(num_of_imu).timestamp() - position_parameter_.at(num_of_imu-1).timestamp();
-
-        ceres::CostFunction* cost_function = new ImuError(imu_data.getGyroMeasurement(),
-                                                          imu_data.getAccelMeasurement(),
-                                                          time_diff);
-
-        optimization_problem_.AddResidualBlock(cost_function,
-                                               NULL,
-                                               position_parameter_.at(num_of_imu).parameters(),
-                                               velocity_parameter_.at(num_of_imu).parameters(),
-                                               rotation_parameter_.at(num_of_imu).parameters(),
-                                               position_parameter_.at(num_of_imu-1).parameters(),
-                                               velocity_parameter_.at(num_of_imu-1).parameters(),
-                                               rotation_parameter_.at(num_of_imu-1).parameters());
-
-        ++num_of_imu;
       }
+    }
+
+    // dead-reckoning to initialize 
+    for (size_t i=0; i<imu_data_vec.size()-1; ++i) {
+        
+      double time_diff = position_parameter_.at(i+1).timestamp() - position_parameter_.at(i).timestamp();
+
+      Eigen::Vector3d accel_measurement = imu_data_vec.at(i).getAccelMeasurement();
+      Eigen::Vector3d gyro_measurement = imu_data_vec.at(i).getGyroMeasurement();      
+      Eigen::Vector3d accel_plus_gravity = rotation_parameter_.at(i).estimate().normalized().toRotationMatrix()*accel_measurement + Eigen::Vector3d(0, 0, -9.81007);
+      Eigen::Vector3d position_t1 = position_parameter_.at(i).estimate() + time_diff*velocity_parameter_.at(i).estimate() + (0.5*time_diff*time_diff) * accel_plus_gravity;
+      Eigen::Vector3d velocity_t1 = velocity_parameter_.at(i).estimate() + time_diff*time_diff * accel_plus_gravity;
+      Eigen::Quaterniond rotation_t1 = rotation_parameter_.at(i).estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*gyro_measurement(0), 0.5*time_diff*gyro_measurement(1), 0.5*time_diff*gyro_measurement(2));
+
+      position_parameter_.at(i+1).setEstimate(position_t1);
+      velocity_parameter_.at(i+1).setEstimate(velocity_t1);
+      rotation_parameter_.at(i+1).setEstimate(rotation_t1);
+
+      // add constraints
+      ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).getGyroMeasurement(),
+                                                        imu_data_vec.at(i).getAccelMeasurement(),
+                                                        time_diff);
+
+      optimization_problem_.AddResidualBlock(cost_function,
+                                             NULL,
+                                             position_parameter_.at(i+1).parameters(),
+                                             velocity_parameter_.at(i+1).parameters(),
+                                             rotation_parameter_.at(i+1).parameters(),
+                                             position_parameter_.at(i).parameters(),
+                                             velocity_parameter_.at(i).parameters(),
+                                             rotation_parameter_.at(i).parameters());      
     }
 
     return true;
@@ -223,6 +240,7 @@ class ExpLandmarkOptSLAM {
 
     optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
     optimization_options_.minimizer_progress_to_stdout = true;
+    optimization_options_.num_threads = 4;
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
     std::cout << optimization_summary_.FullReport() << "\n";
@@ -280,6 +298,7 @@ int main(int argc, char **argv) {
   std::string observation_file_path = "feature_observation.csv";
   // slam_problem.readObservationData(observation_file_path);
 
+  slam_problem.solveOptimizationProblem();
 
 
   return 0;
