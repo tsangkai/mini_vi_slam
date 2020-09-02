@@ -5,6 +5,7 @@ add_library(backend_lib STATIC
   Timed3dParameterBlock.h
   TimedQuatParameterBlock.h
   ImuError.h
+  ReprojectionError.h
 )
 
 target_include_directories(backend_lib

@@ -14,7 +14,7 @@
 #include "Timed3dParameterBlock.h"
 #include "TimedQuatParameterBlock.h"
 #include "ImuError.h"
-// #include "TestImuError.h"
+#include "ReprojectionError.h"
 
 
 // TODO: avoid data conversion
@@ -67,6 +67,50 @@ class IMUData {
   Eigen::Vector3d gyro_;
   Eigen::Vector3d accel_; 
 };
+
+
+class ObservationData {
+ EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+ public:
+  ObservationData(std::string observation_data_str) {
+    std::stringstream str_stream(observation_data_str);          // Create a stringstream of the current line
+
+    if (str_stream.good()) {
+        
+      std::string data_str;
+      std::getline(str_stream, data_str, ',');   // get first string delimited by comma
+      timestamp_ = ConverStrTime(data_str);
+
+      std::getline(str_stream, data_str, ','); 
+      index_ = std::stoi(data_str);
+
+      for (int i=0; i<2; ++i) {                    
+        std::getline(str_stream, data_str, ','); 
+        feature_pos_(i) = std::stod(data_str);
+      }
+    }
+  }
+
+  double getTimeStamp() {
+    return timestamp_;
+  }
+
+  double getId() {
+    return index_;
+  }
+
+  Eigen::Vector2d getObservation() {
+    return feature_pos_;
+  }
+
+ private:
+  double timestamp_;
+  size_t index_;
+  Eigen::Vector2d feature_pos_; 
+};
+
+
 
 class ExpLandmarkOptSLAM {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -154,13 +198,13 @@ class ExpLandmarkOptSLAM {
           optimization_problem_.AddParameterBlock(velocity_parameter_.at(0).parameters(), 3);
           optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(0).parameters());
 
-          return 1;
+          return true;
         }
       }
     }
 
     std::cout << "Initialization fails!" << std::endl;
-    return 0;
+    return false;
   }  
 
 
@@ -226,9 +270,67 @@ class ExpLandmarkOptSLAM {
                                              rotation_parameter_.at(i+1).parameters(),
                                              position_parameter_.at(i).parameters(),
                                              velocity_parameter_.at(i).parameters(),
-                                             rotation_parameter_.at(i).parameters());      
+                                             rotation_parameter_.at(i).parameters());    
     }
 
+    return true;
+  }
+
+
+  bool readObservationData(std::string observation_file_path) {
+  
+
+    std::ifstream input_file(observation_file_path);
+    
+    if(!input_file.is_open())
+      throw std::runtime_error("Could not open file");
+
+    std::string first_line_data_str;
+    std::getline(input_file, first_line_data_str);
+
+    std::string observation_data_str;
+    while (std::getline(input_file, observation_data_str)) {
+      ObservationData observation_data(observation_data_str);
+
+      if (observation_data.getId() > landmark_parameter_.size()) {
+
+        landmark_parameter_.push_back(LandmarkParameterBlock(Eigen::Vector3d(), observation_data.getId()-1));
+      }
+
+      // add observation constraints
+      size_t pose_id;
+      size_t landmark_id = observation_data.getId()-1;
+
+      for (size_t i=0; i<position_parameter_.size(); ++i) {
+        if (observation_data.getTimeStamp() <= position_parameter_.at(i).timestamp()) {
+          pose_id = i;
+          break;
+        }
+      }
+
+      std::cout << pose_id << " " << landmark_id << std::endl;
+
+      ceres::CostFunction* cost_function = new ReprojectionError(observation_data.getObservation(),
+                                                                 focal_length_,
+                                                                 principal_point_);
+
+      std::cout << pose_id << " position prt: " << position_parameter_.at(pose_id).parameters() << std::endl;
+      for  (size_t i=0; i<rotation_parameter_.size(); ++i) {
+        std::cout << i << " rotation prt: " << rotation_parameter_.at(i).parameters() << std::endl;
+      }
+      std::cout << landmark_id << " landmark prt: " << landmark_parameter_.at(landmark_id).parameters() << std::endl;
+
+      optimization_problem_.AddResidualBlock(cost_function,
+                                             NULL,
+                                             position_parameter_.at(pose_id).parameters(),
+                                             rotation_parameter_.at(pose_id).parameters(),
+                                             landmark_parameter_.at(landmark_id).parameters());     
+
+
+
+    }
+
+    std::cout << "Finish reading observation data." << std::endl;
     return true;
   }
 
@@ -240,7 +342,7 @@ class ExpLandmarkOptSLAM {
 
     optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
     optimization_options_.minimizer_progress_to_stdout = true;
-    optimization_options_.num_threads = 4;
+    optimization_options_.num_threads = 10;
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
     std::cout << optimization_summary_.FullReport() << "\n";
@@ -280,7 +382,6 @@ class ExpLandmarkOptSLAM {
 int main(int argc, char **argv) {
 
   /*** Step 0. Configuration files ***/
-
   ExpLandmarkOptSLAM slam_problem;
 
   std::string config_folder_path = "../config/";
@@ -296,9 +397,9 @@ int main(int argc, char **argv) {
   slam_problem.readIMUData(imu_file_path);
 
   std::string observation_file_path = "feature_observation.csv";
-  // slam_problem.readObservationData(observation_file_path);
+  slam_problem.readObservationData(observation_file_path);
 
-  slam_problem.solveOptimizationProblem();
+  // slam_problem.solveOptimizationProblem();
 
 
   return 0;
