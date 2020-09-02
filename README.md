@@ -7,7 +7,7 @@ To build this project, just follow standard CMake procedure.
 ```
 mkdir build
 cd build
-cmake ..
+cmake .. [-D BUILD_TEST=OFF]
 cmake --build .
 ```
 
