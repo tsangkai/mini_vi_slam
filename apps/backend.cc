@@ -294,7 +294,7 @@ class ExpLandmarkOptSLAM {
 
       if (observation_data.getId() > landmark_parameter_.size()) {
 
-        landmark_parameter_.push_back(LandmarkParameterBlock(Eigen::Vector3d(), observation_data.getId()-1));
+        landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d(), observation_data.getId()-1));
       }
 
       // add observation constraints
@@ -312,14 +312,12 @@ class ExpLandmarkOptSLAM {
                                                                  focal_length_,
                                                                  principal_point_);
       // ERROR!!!!!!!!!!!!!!!!
-      /***
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
-                                             position_parameter_.at(pose_id).parameters(),
-                                             rotation_parameter_.at(pose_id).parameters(),
-                                             landmark_parameter_.at(landmark_id).parameters());     
+                                             position_parameter_.at(pose_id)->parameters(),
+                                             rotation_parameter_.at(pose_id)->parameters(),
+                                             landmark_parameter_.at(landmark_id)->parameters());     
 
-      ***/
 
     }
 
@@ -359,7 +357,7 @@ class ExpLandmarkOptSLAM {
   double accel_bias_parameter_[3];
   double gyro_bias_parameter_[3];
 
-  std::vector<LandmarkParameterBlock> landmark_parameter_;
+  std::vector<LandmarkParameterBlock*> landmark_parameter_;
 
   // ceres parameter
   ceres::Problem optimization_problem_;
