@@ -15,13 +15,18 @@
 
 class CameraData {
  public:
-  CameraData(std::string timeStampStr, std::string dataFilePath) {
-    time_ = timeStampStr;
-    image_ = cv::imread(dataFilePath,cv::IMREAD_GRAYSCALE);
+  CameraData(std::string timestamp_str, std::string data_file_path) {
+    time_ = timestamp_str;
+    image_ = cv::imread(data_file_path, cv::IMREAD_GRAYSCALE);
   }
 
-  std::string getTime() { return time_; }
-  cv::Mat getImage() { return image_; }
+  std::string getTime() { 
+    return time_; 
+  }
+  
+  cv::Mat getImage() { 
+    return image_; 
+  }
 
  private:
   std::string time_;   // we don't have to process time at this moment
@@ -85,7 +90,7 @@ int main(int argc, char **argv) {
   for (auto iter = boost::filesystem::directory_iterator(path + camera_data_folder);
         iter != boost::filesystem::directory_iterator(); iter++) {
 
-    if (!boost::filesystem::is_directory(iter->path())) {          //we eliminate directories
+    if (!boost::filesystem::is_directory(iter->path())) {          // we eliminate directories
       image_names.push_back(iter->path().filename().string());
     } 
     else
@@ -93,8 +98,6 @@ int main(int argc, char **argv) {
   }
 
   std::sort(image_names.begin(), image_names.end());
-
-  // size_t downsample_rate = DOWNSAMPLE_RATE;
 
   std::vector<CameraData> camera_observation_data;   // image and timestep
 
@@ -154,7 +157,7 @@ int main(int argc, char **argv) {
 
     cv::Mat img_w_matches;
     for (size_t k=0; k<image_matches.at(i).size(); k++) {
-      if (image_matches.at(i)[k].distance < 60) {   // 60
+      if (image_matches.at(i)[k].distance < 60) {
         image_good_matches.at(i).push_back(image_matches.at(i)[k]);
       }
     }
