@@ -18,12 +18,12 @@ Please check the configuration file `config/test.yaml` for the workflow includin
 
 To run `frontend`, please provide the directory of images.
 ```
-./frontend [path_to_image_directory]
+./apps/frontend [path_to_image_directory]
 ```
 
 To run `backend`, one needs to sepcify three files: observation file, IMU file, and ground truth for initialization.
 ```
-./backend [path_to_observation_file] [path_to_imu_file] [path_to_ground_truth_file]
+./apps/backend [path_to_observation_file] [path_to_imu_file] [path_to_ground_truth_file]
 ```
 
 Currently, for developing, I write the paths in the code. Therefore, directly executing those files without argements is fine.
