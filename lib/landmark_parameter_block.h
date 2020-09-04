@@ -31,83 +31,94 @@
  *********************************************************************************/
 
 /**
- * @file PoseParameterBlock.hpp
- * @brief Header file for the PoseParameterBlock class.
+ * @file HomogeneousPointParameterBlock.hpp
+ * @brief Header file for the HomogeneousPointParameterBlock class.
  * @author Stefan Leutenegger
  */
 
-#ifndef INCLUDE_TIMED_QUAT_PARAMETERBLOCK_H_
-#define INCLUDE_TIMED_QUAT_PARAMETERBLOCK_H_
+#ifndef INCLUDE_LANDMAKRPARAMETERBLOCK_H_
+#define INCLUDE_LANDMAKRPARAMETERBLOCK_H_
 
 #include <Eigen/Core>
-#include <Eigen/Geometry>
 
-#include "SizedParameterBlock.h"
-// #include "PoseLocalParameterization.h"
+#include "sized_parameter_block.h"
+// #include "LandmarkLocalParameterization.h"
 
+/// \brief okvis Main namespace of this package.
 // namespace okvis {
-// namespace ceres{
+/// \brief ceres Namespace for ceres-related functionality implemented in okvis.
+// namespace ceres {
 
-/// \brief Wraps the parameter block for a pose estimate
-class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaterniond> {
+class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
  public:
 
   /// \brief The estimate type (3D vector).
-  typedef Eigen::Quaterniond estimate_t;
+  typedef Eigen::Vector3d estimate_t;
 
   /// \brief The base class type.
-  typedef SizedParameterBlock<4, 3, Eigen::Quaterniond> base_t;
+  typedef SizedParameterBlock<3, 3, estimate_t> base_t;
 
   /// \brief Default constructor (assumes not fixed).
-  TimedQuatParameterBlock(): 
-    base_t::SizedParameterBlock() {
-      setFixed(false);
-  }
-
-  /// \brief Constructor with estimate and time.
-  /// @param[in] T_WS The pose estimate as T_WS.
-  /// @param[in] id The (unique) ID of this block.
-  /// @param[in] timestamp The timestamp of this state.
-  TimedQuatParameterBlock(const Eigen::Quaterniond& quat, uint64_t id, 
-                          const double timestamp) {
-    setEstimate(quat);
-    setId(id);
-    setTimestamp(timestamp);
+  LandmarkParameterBlock(): base_t::SizedParameterBlock(),
+    initialized_(false) {
     setFixed(false);
   }
 
 
+  /// \brief Constructor with estimate and time.
+  /// @param[in] point The homogeneous point estimate.
+  /// @param[in] id The (unique) ID of this block.
+  /// @param[in] initialized Whether or not the 3d position is considered initialised.
+  LandmarkParameterBlock(const Eigen::Vector3d& point, uint64_t id,
+                         bool initialized = true) {
+    setEstimate(point);
+    setId(id);
+    setInitialized(initialized);
+    setFixed(false);
+  }
+
   /// \brief Trivial destructor.
-  ~TimedQuatParameterBlock() {}
+  ~LandmarkParameterBlock() {};
 
-  // setters
+  /// @name Setters
+  /// @{
+
   /// @brief Set estimate of this parameter block.
-  /// @param[in] T_WS The estimate to set this to.
-  void setEstimate(const Eigen::Quaterniond& quat) {
-      parameters_[0] = quat.w();
-      parameters_[1] = quat.x();
-      parameters_[2] = quat.y();
-      parameters_[3] = quat.z();
+  /// @param[in] point The estimate to set this to.
+  void setEstimate(const Eigen::Vector3d& point) {
+    // hack: only do "Euclidean" points for now...
+    for (int i = 0; i < base_t::Dimension; ++i)
+      parameters_[i] = point[i];
   }
 
-
-  /// @param[in] timestamp The timestamp of this state.
-  void setTimestamp(const double timestamp){
-    timestamp_=timestamp;
+  /// \brief Set initialisaiton status.
+  /// @param[in] initialized Whether or not the 3d position is considered initialised.
+  void setInitialized(bool initialized) {
+    initialized_ = initialized;
   }
 
-  // getters
-  /// @brief Get estimate.
+  /// @}
+
+  /// @name Getters
+  /// @{
+
+  /// @brief Get estimate
   /// \return The estimate.
-  Eigen::Quaterniond estimate() const {
-    return Eigen::Quaterniond(parameters_[0], parameters_[1], parameters_[2], parameters_[3]);
+  Eigen::Vector3d estimate() const {
+    return Eigen::Vector3d(parameters_[0], parameters_[1], parameters_[2]);
   }
 
-  /// \brief Get the time.
-  /// \return The timestamp of this state.
-  double timestamp() const {
-    return timestamp_;
+  /// \brief Get initialisaiton status.
+  /// \return Whether or not the 3d position is considered initialised.
+  bool initialized() const
+  {
+    return initialized_;
   }
+
+
+
+
+  /// @}
 
   // minimal internal parameterization
   // x0_plus_Delta=Delta_Chi[+]x0
@@ -117,16 +128,19 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   /// @param[in] x0 Variable.
   /// @param[in] Delta_Chi Perturbation.
   /// @param[out] x0_plus_Delta Perturbed x.
-  // virtual void plus(const double* x0, const double* Delta_Chi, double* x0_plus_Delta) const {
-  //  PoseLocalParameterization::plus(x0,Delta_Chi,x0_plus_Delta);
-  // }
+  /// virtual void plus(const double* x0, const double* Delta_Chi,
+  ///                  double* x0_plus_Delta) const
+  ///{
+  ///  LandmarkLocalParameterization::plus(x0, Delta_Chi, x0_plus_Delta);
+  /// }
 
   /// \brief The jacobian of Plus(x, delta) w.r.t delta at delta = 0.
   /// @param[in] x0 Variable.
   /// @param[out] jacobian The Jacobian.
-  // virtual void plusJacobian(const double* x0, double* jacobian) const {
-  //  PoseLocalParameterization::plusJacobian(x0,jacobian);
-  // }
+  /// virtual void plusJacobian(const double* x0, double* jacobian) const
+  /// {
+  ///  LandmarkLocalParameterization::plusJacobian(x0, jacobian);
+  /// }
 
   // Delta_Chi=x0_plus_Delta[-]x0
   /// \brief Computes the minimal difference between a variable x and a perturbed variable x_plus_delta
@@ -134,26 +148,33 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   /// @param[in] x0_plus_Delta Perturbed variable.
   /// @param[out] Delta_Chi Minimal difference.
   /// \return True on success.
-  // virtual void minus(const double* x0, const double* x0_plus_Delta, double* Delta_Chi) const {
-  //   PoseLocalParameterization::minus(x0, x0_plus_Delta, Delta_Chi);
-  // }
+  /// virtual void minus(const double* x0, const double* x0_plus_Delta,
+  ///                   double* Delta_Chi) const
+  /// {
+  ///  LandmarkLocalParameterization::minus(x0, x0_plus_Delta, Delta_Chi);
+  ///}
 
   /// \brief Computes the Jacobian from minimal space to naively overparameterised space as used by ceres.
   /// @param[in] x0 Variable.
   /// @param[out] jacobian the Jacobian (dimension minDim x dim).
   /// \return True on success.
-  // virtual void liftJacobian(const double* x0, double* jacobian) const {
-  //   PoseLocalParameterization::liftJacobian(x0,jacobian);
-  // }
+  /// virtual void liftJacobian(const double* x0, double* jacobian) const
+  /// {
+  ///  LandmarkLocalParameterization::liftJacobian(x0, jacobian);
+  /// }
 
   /// @brief Return parameter block type as string
-  virtual std::string typeInfo() const {return "TimedQuatParameterBlock";}
+  std::string typeInfo() const
+  {
+    return "LandmarkParameterBlock";
+  }
 
-private:
-  double timestamp_; ///< Time of this state.
+ private:
+  bool initialized_;  ///< Whether or not the 3d position is considered initialised.
+
 };
 
-// } // namespace ceres
-// } // namespace okvis
+// }  // namespace ceres
+// }  // namespace okvis
 
-#endif /* INCLUDE_TIMED_QUAT_PARAMETERBLOCK_H_ */
+#endif /* INCLUDE_LANDMAKRPARAMETERBLOCK_H_ */

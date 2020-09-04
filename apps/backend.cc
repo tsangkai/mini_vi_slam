@@ -10,11 +10,11 @@
 #include <opencv2/core/core.hpp>
 #include <Eigen/Core>
 
-#include "LandmarkParameterBlock.h"
-#include "Timed3dParameterBlock.h"
-#include "TimedQuatParameterBlock.h"
-#include "ImuError.h"
-#include "ReprojectionError.h"
+#include "landmark_parameter_block.h"
+#include "timed_3d_parameter_block.h"
+#include "timed_quat_parameter_block.h"
+#include "imu_error.h"
+#include "reprojection_error.h"
 
 
 // TODO: avoid data conversion

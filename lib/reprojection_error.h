@@ -47,7 +47,7 @@
 // namespace ceres {
 
 /// \brief Reprojection error base class.
-class ReprojectionError :
+class ReprojectionError:
     public ceres::SizedCostFunction<2,     // number of residuals
         3,                         // number of parameters in p_t
         4,                         // number of parameters in q_t

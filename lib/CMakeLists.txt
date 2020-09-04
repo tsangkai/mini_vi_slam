@@ -1,11 +1,11 @@
 add_library(backend_lib STATIC
-  ParameterBlock.h
-  SizedParameterBlock.h
-  LandmarkParameterBlock.h
-  Timed3dParameterBlock.h
-  TimedQuatParameterBlock.h
-  ImuError.h
-  ReprojectionError.h
+  parameter_block.h
+  sized_parameter_block.h
+  landmark_parameter_block.h
+  timed_3d_parameter_block.h
+  timed_quat_parameter_block.h
+  imu_error.h
+  reprojection_error.h
 )
 
 target_include_directories(backend_lib

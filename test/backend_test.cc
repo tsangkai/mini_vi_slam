@@ -46,10 +46,10 @@
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
-#include "SizedParameterBlock.h"
-#include "LandmarkParameterBlock.h"
-#include "Timed3dParameterBlock.h"
-#include "TimedQuatParameterBlock.h"
+#include "sized_parameter_block.h"
+#include "landmark_parameter_block.h"
+#include "timed_3d_parameter_block.h"
+#include "timed_quat_parameter_block.h"
 
 /***
 struct SnavelyReprojectionError {

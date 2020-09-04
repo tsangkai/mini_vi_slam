@@ -16,20 +16,20 @@
 class CameraData {
  public:
   CameraData(std::string timestamp_str, std::string data_file_path) {
-    time_ = timestamp_str;
+    timestamp_ = timestamp_str;
     image_ = cv::imread(data_file_path, cv::IMREAD_GRAYSCALE);
   }
 
-  std::string getTime() { 
-    return time_; 
+  std::string GetTimestamp() { 
+    return timestamp_; 
   }
   
-  cv::Mat getImage() { 
+  cv::Mat GetImage() { 
     return image_; 
   }
 
  private:
-  std::string time_;   // we don't have to process time at this moment
+  std::string timestamp_;   // we don't have to process time at this moment
   cv::Mat image_;
 };
 
@@ -41,11 +41,11 @@ class CVKeypoint {
  		hash_value_ = keypoint.hash();
  	}
 
-  float getU() {
+  float GetU() {
   	return keypoint_.pt.x;
   }
 
-  float getV() {
+  float GetV() {
   	return keypoint_.pt.y;
   }
 
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         std::string dataFilePath = path + camera_data_folder + image_names_iter;
         camera_observation_data.push_back(CameraData(time_stamp_str, dataFilePath));
 
-        // cv::imshow(time_stamp_str, camera_observation_data.back().getImage());
+        // cv::imshow(time_stamp_str, camera_observation_data.back().GetImage());
         // cv::waitKey(100);
       }
     }
@@ -136,9 +136,9 @@ int main(int argc, char **argv) {
 
   for (size_t i=0; i<num_of_cam_observations; i++) {	
 
-    brisk_detector->detect(camera_observation_data.at(i).getImage(), image_keypoints.at(i));
+    brisk_detector->detect(camera_observation_data.at(i).GetImage(), image_keypoints.at(i));
 
-    brisk_detector->compute(camera_observation_data.at(i).getImage(), 
+    brisk_detector->compute(camera_observation_data.at(i).GetImage(), 
       image_keypoints.at(i), 
       image_descriptions.at(i));
   }
@@ -162,8 +162,8 @@ int main(int argc, char **argv) {
       }
     }
 
-    cv::drawMatches(camera_observation_data.at(i).getImage(), image_keypoints.at(i),
-                    camera_observation_data.at(i+1).getImage(), image_keypoints.at(i+1),
+    cv::drawMatches(camera_observation_data.at(i).GetImage(), image_keypoints.at(i),
+                    camera_observation_data.at(i+1).GetImage(), image_keypoints.at(i+1),
                     image_good_matches.at(i), img_w_matches);
 
     cv::imshow("Matches between " + std::to_string(i) + " and " + std::to_string(i+1), img_w_matches);
@@ -204,8 +204,8 @@ int main(int argc, char **argv) {
 
     // output
     // timestamp [ns], landmark id, u [pixel], v [pixel]
-    std::string output_str = camera_observation_data.at(i).getTime() + "," + std::to_string(landmark_id+1) + ","
-                              + std::to_string(pre_keypoint.getU()) + "," + std::to_string(pre_keypoint.getV()) + "\n";
+    std::string output_str = camera_observation_data.at(i).GetTimestamp() + "," + std::to_string(landmark_id+1) + ","
+                              + std::to_string(pre_keypoint.GetU()) + "," + std::to_string(pre_keypoint.GetV()) + "\n";
     output_feature_observation.push_back(output_str);
     // output_file << output_str;
 

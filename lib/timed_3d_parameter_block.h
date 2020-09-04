@@ -31,25 +31,24 @@
  *********************************************************************************/
 
 /**
- * @file HomogeneousPointParameterBlock.hpp
- * @brief Header file for the HomogeneousPointParameterBlock class.
+ * @file PoseParameterBlock.hpp
+ * @brief Header file for the PoseParameterBlock class.
  * @author Stefan Leutenegger
  */
 
-#ifndef INCLUDE_LANDMAKRPARAMETERBLOCK_H_
-#define INCLUDE_LANDMAKRPARAMETERBLOCK_H_
+#ifndef INCLUDE_TIMED_3D_PARAMETERBLOCK_H_
+#define INCLUDE_TIMED_3D_PARAMETERBLOCK_H_
 
 #include <Eigen/Core>
 
-#include "SizedParameterBlock.h"
-// #include "LandmarkLocalParameterization.h"
+#include "sized_parameter_block.h"
+// #include "PoseLocalParameterization.h"
 
-/// \brief okvis Main namespace of this package.
 // namespace okvis {
-/// \brief ceres Namespace for ceres-related functionality implemented in okvis.
-// namespace ceres {
+// namespace ceres{
 
-class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
+/// \brief Wraps the parameter block for a pose estimate
+class Timed3dParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
  public:
 
   /// \brief The estimate type (3D vector).
@@ -59,66 +58,52 @@ class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> 
   typedef SizedParameterBlock<3, 3, estimate_t> base_t;
 
   /// \brief Default constructor (assumes not fixed).
-  LandmarkParameterBlock(): base_t::SizedParameterBlock(),
-    initialized_(false) {
-    setFixed(false);
+  Timed3dParameterBlock(): 
+    base_t::SizedParameterBlock() {
+      setFixed(false);
   }
-
 
   /// \brief Constructor with estimate and time.
-  /// @param[in] point The homogeneous point estimate.
+  /// @param[in] T_WS The pose estimate as T_WS.
   /// @param[in] id The (unique) ID of this block.
-  /// @param[in] initialized Whether or not the 3d position is considered initialised.
-  LandmarkParameterBlock(const Eigen::Vector3d& point, uint64_t id,
-                         bool initialized = true) {
+  /// @param[in] timestamp The timestamp of this state.
+  Timed3dParameterBlock(const Eigen::Vector3d& point, uint64_t id, 
+                        const double timestamp) {
     setEstimate(point);
     setId(id);
-    setInitialized(initialized);
+    setTimestamp(timestamp);
     setFixed(false);
   }
 
+
   /// \brief Trivial destructor.
-  ~LandmarkParameterBlock() {};
+  ~Timed3dParameterBlock() {};
 
-  /// @name Setters
-  /// @{
-
+  // setters
   /// @brief Set estimate of this parameter block.
-  /// @param[in] point The estimate to set this to.
+  /// @param[in] T_WS The estimate to set this to.
   void setEstimate(const Eigen::Vector3d& point) {
     // hack: only do "Euclidean" points for now...
     for (int i = 0; i < base_t::Dimension; ++i)
       parameters_[i] = point[i];
   }
-
-  /// \brief Set initialisaiton status.
-  /// @param[in] initialized Whether or not the 3d position is considered initialised.
-  void setInitialized(bool initialized) {
-    initialized_ = initialized;
+  
+  /// @param[in] timestamp The timestamp of this state.
+  void setTimestamp(const double timestamp){
+    timestamp_=timestamp;
   }
 
-  /// @}
-
-  /// @name Getters
-  /// @{
-
-  /// @brief Get estimate
+  // getters
+  /// @brief Get estimate.
   /// \return The estimate.
   Eigen::Vector3d estimate() const {
     return Eigen::Vector3d(parameters_[0], parameters_[1], parameters_[2]);
   }
-
-  /// \brief Get initialisaiton status.
-  /// \return Whether or not the 3d position is considered initialised.
-  bool initialized() const
-  {
-    return initialized_;
+  /// \brief Get the time.
+  /// \return The timestamp of this state.
+  double timestamp() const {
+    return timestamp_;
   }
-
-
-
-
-  /// @}
 
   // minimal internal parameterization
   // x0_plus_Delta=Delta_Chi[+]x0
@@ -128,19 +113,16 @@ class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> 
   /// @param[in] x0 Variable.
   /// @param[in] Delta_Chi Perturbation.
   /// @param[out] x0_plus_Delta Perturbed x.
-  /// virtual void plus(const double* x0, const double* Delta_Chi,
-  ///                  double* x0_plus_Delta) const
-  ///{
-  ///  LandmarkLocalParameterization::plus(x0, Delta_Chi, x0_plus_Delta);
-  /// }
+  // virtual void plus(const double* x0, const double* Delta_Chi, double* x0_plus_Delta) const {
+  //  PoseLocalParameterization::plus(x0,Delta_Chi,x0_plus_Delta);
+  // }
 
   /// \brief The jacobian of Plus(x, delta) w.r.t delta at delta = 0.
   /// @param[in] x0 Variable.
   /// @param[out] jacobian The Jacobian.
-  /// virtual void plusJacobian(const double* x0, double* jacobian) const
-  /// {
-  ///  LandmarkLocalParameterization::plusJacobian(x0, jacobian);
-  /// }
+  // virtual void plusJacobian(const double* x0, double* jacobian) const {
+  //  PoseLocalParameterization::plusJacobian(x0,jacobian);
+  // }
 
   // Delta_Chi=x0_plus_Delta[-]x0
   /// \brief Computes the minimal difference between a variable x and a perturbed variable x_plus_delta
@@ -148,33 +130,26 @@ class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> 
   /// @param[in] x0_plus_Delta Perturbed variable.
   /// @param[out] Delta_Chi Minimal difference.
   /// \return True on success.
-  /// virtual void minus(const double* x0, const double* x0_plus_Delta,
-  ///                   double* Delta_Chi) const
-  /// {
-  ///  LandmarkLocalParameterization::minus(x0, x0_plus_Delta, Delta_Chi);
-  ///}
+  // virtual void minus(const double* x0, const double* x0_plus_Delta, double* Delta_Chi) const {
+  //   PoseLocalParameterization::minus(x0, x0_plus_Delta, Delta_Chi);
+  // }
 
   /// \brief Computes the Jacobian from minimal space to naively overparameterised space as used by ceres.
   /// @param[in] x0 Variable.
   /// @param[out] jacobian the Jacobian (dimension minDim x dim).
   /// \return True on success.
-  /// virtual void liftJacobian(const double* x0, double* jacobian) const
-  /// {
-  ///  LandmarkLocalParameterization::liftJacobian(x0, jacobian);
-  /// }
+  // virtual void liftJacobian(const double* x0, double* jacobian) const {
+  //   PoseLocalParameterization::liftJacobian(x0,jacobian);
+  // }
 
   /// @brief Return parameter block type as string
-  std::string typeInfo() const
-  {
-    return "LandmarkParameterBlock";
-  }
+  virtual std::string typeInfo() const {return "Timed3dParameterBlock";}
 
- private:
-  bool initialized_;  ///< Whether or not the 3d position is considered initialised.
-
+private:
+  double timestamp_; ///< Time of this state.
 };
 
-// }  // namespace ceres
-// }  // namespace okvis
+// } // namespace ceres
+// } // namespace okvis
 
-#endif /* INCLUDE_LANDMAKRPARAMETERBLOCK_H_ */
+#endif /* INCLUDE_TIMED_3D_PARAMETERBLOCK_H_ */

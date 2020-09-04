@@ -44,7 +44,7 @@
 #include <stdint.h>
 #include <Eigen/Core>
 
-#include "ParameterBlock.h"
+#include "parameter_block.h"
 
 
 /// \brief okvis Main namespace of this package.
@@ -57,7 +57,7 @@
 /// @tparam MinDim  Minimal dimension of parameter block
 /// @tparam T       The type of the estimate
 template<int Dim, int MinDim, class T>
-class SizedParameterBlock : public ParameterBlock {
+class SizedParameterBlock: public ParameterBlock {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
   // OKVIS_DEFINE_EXCEPTION(Exception,std::runtime_error)
