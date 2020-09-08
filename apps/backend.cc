@@ -17,7 +17,7 @@
 #include "reprojection_error.h"
 
 
-// TODO: avoid data conversion
+                                                         // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
   std::string time_str_sec = time_str.substr(7,3);       // second
   std::string time_str_nano_sec = time_str.substr(10);   // nano-second
@@ -185,7 +185,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
-          rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond(), 0, ConverStrTime(time_stamp_str)));
+          rotation_parameter_.push_back(new TimedQuatParameterBlock(initial_rotation, 0, ConverStrTime(time_stamp_str)));
           optimization_problem_.AddParameterBlock(rotation_parameter_.at(0)->parameters(), 4);
           optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(0)->parameters());
 
@@ -202,15 +202,75 @@ class ExpLandmarkOptSLAM {
 
           std::cout << "Finished initialization from the ground truth file." << std::endl;
 
+          input_file.close();
           return true;
         }
       }
     }
 
+    input_file.close();
     std::cout << "Initialization fails!" << std::endl;
     return false;
   }  
 
+
+  bool ProcessGroundTruth(std::string ground_truth_file_path) {
+
+    std::cout << "Read ground truth data at " << ground_truth_file_path << std::endl;
+
+    std::ifstream input_file(ground_truth_file_path);
+    if(!input_file.is_open()) 
+      throw std::runtime_error("Could not open file");
+
+    // Read the column names
+    // Extract the first line in the file
+    std::string line;
+    std::getline(input_file, line);
+
+    std::ofstream output_file("ground_truth.csv");
+    output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z,b_w_x,b_w_y,b_w_z,b_a_x,b_a_y,b_a_z\n";
+
+    while (std::getline(input_file, line)) {
+      std::stringstream s_stream(line);                // Create a stringstream of the current line
+
+      if (s_stream.good()) {
+        std::string time_stamp_str;
+        std::getline(s_stream, time_stamp_str, ',');   // get first string delimited by comma
+      
+        if (time_begin_ <= ConverStrTime(time_stamp_str) && ConverStrTime(time_stamp_str) <= time_end_) {
+
+          std::string data;
+          output_file << std::to_string(ConverStrTime(time_stamp_str));
+          for (int i=0; i<7; ++i) {                    
+            std::getline(s_stream, data, ',');
+
+            output_file << ",";
+            output_file << data;
+          }
+
+          // ignore velocity part
+          for (int i=0; i<3; ++i) {                    
+            std::getline(s_stream, data, ',');
+          }
+
+          for (int i=0; i<6; ++i) {                    
+            std::getline(s_stream, data, ',');
+
+            output_file << ",";
+            output_file << data;
+          }
+
+          output_file << std::endl;
+
+        }
+      }
+    }
+
+    input_file.close();
+    output_file.close();
+
+    return true;
+  }  
 
   bool ReadIMUData(std::string imu_file_path) {
   
@@ -226,7 +286,7 @@ class ExpLandmarkOptSLAM {
     std::string first_line_data_str;
     std::getline(input_file, first_line_data_str);
 
-
+    // storage of IMU data
     std::vector<IMUData> imu_data_vec;
 
     std::string imu_data_str;
@@ -243,7 +303,6 @@ class ExpLandmarkOptSLAM {
           velocity_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data_vec.size()-1, imu_data.GetTimestamp()));
           rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond(), imu_data_vec.size()-1, imu_data.GetTimestamp()));
         }
-
       }
     }
 
@@ -252,16 +311,21 @@ class ExpLandmarkOptSLAM {
         
       double time_diff = position_parameter_.at(i+1)->timestamp() - position_parameter_.at(i)->timestamp();
 
+      // for debugging now
+      // parameters needs to be estimated in the optimization
+      Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196,0.021298,0.078430);
+      Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176,0.137568,0.076295);
+
       Eigen::Vector3d accel_measurement = imu_data_vec.at(i).GetAccelMeasurement();
       Eigen::Vector3d gyro_measurement = imu_data_vec.at(i).GetGyroMeasurement();      
-      Eigen::Vector3d accel_plus_gravity = rotation_parameter_.at(i)->estimate().normalized().toRotationMatrix()*accel_measurement + Eigen::Vector3d(0, 0, -9.81007);
-      Eigen::Vector3d position_t1 = position_parameter_.at(i)->estimate() + time_diff*velocity_parameter_.at(i)->estimate() + (0.5*time_diff*time_diff) * accel_plus_gravity;
-      Eigen::Vector3d velocity_t1 = velocity_parameter_.at(i)->estimate() + time_diff*time_diff * accel_plus_gravity;
-      Eigen::Quaterniond rotation_t1 = rotation_parameter_.at(i)->estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*gyro_measurement(0), 0.5*time_diff*gyro_measurement(1), 0.5*time_diff*gyro_measurement(2));
+      Eigen::Vector3d accel_plus_gravity = rotation_parameter_.at(i)->estimate().normalized().toRotationMatrix()*(accel_measurement - accel_bias) + Eigen::Vector3d(0, 0, -9.81007);
+      Eigen::Vector3d position_t_plus_1 = position_parameter_.at(i)->estimate() + time_diff*velocity_parameter_.at(i)->estimate() + (0.5*time_diff*time_diff)*accel_plus_gravity;
+      Eigen::Vector3d velocity_t_plus_1 = velocity_parameter_.at(i)->estimate() + time_diff*accel_plus_gravity;
+      Eigen::Quaterniond rotation_t_plus_1 = rotation_parameter_.at(i)->estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
 
-      position_parameter_.at(i+1)->setEstimate(position_t1);
-      velocity_parameter_.at(i+1)->setEstimate(velocity_t1);
-      rotation_parameter_.at(i+1)->setEstimate(rotation_t1);
+      position_parameter_.at(i+1)->setEstimate(position_t_plus_1);
+      velocity_parameter_.at(i+1)->setEstimate(velocity_t_plus_1);
+      rotation_parameter_.at(i+1)->setEstimate(rotation_t_plus_1);
 
       // add constraints
       ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).GetGyroMeasurement(),
@@ -278,6 +342,7 @@ class ExpLandmarkOptSLAM {
                                              rotation_parameter_.at(i)->parameters());    
     }
 
+    input_file.close();
     std::cout << "Finished reading IMU data." << std::endl;
     return true;
   }
@@ -328,6 +393,7 @@ class ExpLandmarkOptSLAM {
                                              landmark_parameter_.at(landmark_id)->parameters()); 
     }
 
+    input_file.close();
     std::cout << "Finished reading observation data." << std::endl;
     return true;
   }
@@ -347,6 +413,29 @@ class ExpLandmarkOptSLAM {
     return true;
   }
 
+
+  bool OutputOptimizationResult(std::string output_file_path) {
+
+    std::ofstream output_file(output_file_path);
+
+    output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z\n";
+
+    for (size_t i=0; i<rotation_parameter_.size(); ++i) {
+      output_file << std::to_string(rotation_parameter_.at(i)->timestamp()) << ",";
+      output_file << std::to_string(position_parameter_.at(i)->estimate()(0)) << ",";
+      output_file << std::to_string(position_parameter_.at(i)->estimate()(1)) << ",";
+      output_file << std::to_string(position_parameter_.at(i)->estimate()(2)) << ",";
+      output_file << std::to_string(rotation_parameter_.at(i)->estimate().w()) << ",";
+      output_file << std::to_string(rotation_parameter_.at(i)->estimate().x()) << ",";
+      output_file << std::to_string(rotation_parameter_.at(i)->estimate().y()) << ",";
+      output_file << std::to_string(rotation_parameter_.at(i)->estimate().z()) << std::endl;
+    }
+
+
+    
+    output_file.close();
+    return true;
+  }
 
  private:
   double time_begin_;
@@ -386,15 +475,17 @@ int main(int argc, char **argv) {
   std::string euroc_dataset_path = "../../../dataset/mav0/";
   std::string ground_truth_file_path = euroc_dataset_path + "state_groundtruth_estimate0/data.csv";
   slam_problem.ReadInitialCondition(ground_truth_file_path);
+  slam_problem.ProcessGroundTruth(ground_truth_file_path);
 
   std::string imu_file_path = euroc_dataset_path + "imu0/data.csv";
   slam_problem.ReadIMUData(imu_file_path);
 
-  std::string observation_file_path = "feature_observation.csv";
-  slam_problem.ReadObservationData(observation_file_path);
+  // std::string observation_file_path = "feature_observation.csv";
+  // slam_problem.ReadObservationData(observation_file_path);
 
   // slam_problem.SolveOptimizationProblem();
 
+  slam_problem.OutputOptimizationResult("result.csv");
 
   return 0;
 }
