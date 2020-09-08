@@ -130,10 +130,13 @@ class ExpLandmarkOptSLAM {
 
     cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];  // from camera frame to body frame
 
-    T_BC_ << T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 
+    Eigen::Matrix4d T_BC;
+    T_BC  << T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 
              T_BC_node[4],  T_BC_node[5],  T_BC_node[6],  T_BC_node[7], 
              T_BC_node[8],  T_BC_node[9],  T_BC_node[10], T_BC_node[11], 
              T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
+
+    T_BC_ = T_BC;
 
     double focal_length_0 = experiment_config_file["cameras"][0]["focal_length"][0];  // i don't know the unit!!!!
     double focal_length_1 = experiment_config_file["cameras"][0]["focal_length"][1];
@@ -312,13 +315,14 @@ class ExpLandmarkOptSLAM {
       double time_diff = position_parameter_.at(i+1)->timestamp() - position_parameter_.at(i)->timestamp();
 
       // for debugging now
-      // parameters needs to be estimated in the optimization
-      Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196,0.021298,0.078430);
-      Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176,0.137568,0.076295);
+      // parameters are from ground truth data currently, and can be estimatd in the optimization problem later
+      Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
+      Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
+      Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
 
       Eigen::Vector3d accel_measurement = imu_data_vec.at(i).GetAccelMeasurement();
       Eigen::Vector3d gyro_measurement = imu_data_vec.at(i).GetGyroMeasurement();      
-      Eigen::Vector3d accel_plus_gravity = rotation_parameter_.at(i)->estimate().normalized().toRotationMatrix()*(accel_measurement - accel_bias) + Eigen::Vector3d(0, 0, -9.81007);
+      Eigen::Vector3d accel_plus_gravity = rotation_parameter_.at(i)->estimate().normalized().toRotationMatrix()*(accel_measurement - accel_bias) + gravity;
       Eigen::Vector3d position_t_plus_1 = position_parameter_.at(i)->estimate() + time_diff*velocity_parameter_.at(i)->estimate() + (0.5*time_diff*time_diff)*accel_plus_gravity;
       Eigen::Vector3d velocity_t_plus_1 = velocity_parameter_.at(i)->estimate() + time_diff*accel_plus_gravity;
       Eigen::Quaterniond rotation_t_plus_1 = rotation_parameter_.at(i)->estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
@@ -378,11 +382,10 @@ class ExpLandmarkOptSLAM {
       if (landmark_id >= landmark_parameter_.size()) {
         landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d(), landmark_id));
       }
-
-
-      std::cout << pose_id << ": " << landmark_id << std::endl;
+      //std::cout << pose_id << ": " << landmark_id << std::endl;
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
+                                                                 T_BC_.rotation().transpose(),
                                                                  focal_length_,
                                                                  principal_point_);
 
@@ -431,8 +434,6 @@ class ExpLandmarkOptSLAM {
       output_file << std::to_string(rotation_parameter_.at(i)->estimate().z()) << std::endl;
     }
 
-
-    
     output_file.close();
     return true;
   }
@@ -441,8 +442,8 @@ class ExpLandmarkOptSLAM {
   double time_begin_;
   double time_end_;
 
-  // camera parameters
-  Eigen::Matrix4d T_BC_;                                            // from camera frame to body frame
+  // camera intrinsic parameters
+  Eigen::Transform<double, 3, Eigen::Affine> T_BC_;                    // from camera frame to body frame
   double focal_length_;
   double principal_point_[2];
 
@@ -480,10 +481,10 @@ int main(int argc, char **argv) {
   std::string imu_file_path = euroc_dataset_path + "imu0/data.csv";
   slam_problem.ReadIMUData(imu_file_path);
 
-  // std::string observation_file_path = "feature_observation.csv";
-  // slam_problem.ReadObservationData(observation_file_path);
+  std::string observation_file_path = "feature_observation.csv";
+  slam_problem.ReadObservationData(observation_file_path);
 
-  // slam_problem.SolveOptimizationProblem();
+  slam_problem.SolveOptimizationProblem();
 
   slam_problem.OutputOptimizationResult("result.csv");
 
