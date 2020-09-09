@@ -128,23 +128,6 @@ class ImuError :
 
     if (jacobians != NULL) {
       
-      Eigen::MatrixXd J_p_to_q(3,4);
-      J_p_to_q(0,0) = accel_measurement_(0)*( 2)*_rotation_t.w()+accel_measurement_(1)*(-2)*_rotation_t.z()+accel_measurement_(2)*( 2)*_rotation_t.y();
-      J_p_to_q(0,1) = accel_measurement_(0)*( 2)*_rotation_t.x()+accel_measurement_(1)*( 2)*_rotation_t.y()+accel_measurement_(2)*( 2)*_rotation_t.z();
-      J_p_to_q(0,2) = accel_measurement_(0)*(-2)*_rotation_t.y()+accel_measurement_(1)*( 2)*_rotation_t.x()+accel_measurement_(2)*( 2)*_rotation_t.w();
-      J_p_to_q(0,3) = accel_measurement_(0)*(-2)*_rotation_t.z()+accel_measurement_(1)*(-2)*_rotation_t.w()+accel_measurement_(2)*( 2)*_rotation_t.x();
-
-      J_p_to_q(1,0) = accel_measurement_(0)*( 2)*_rotation_t.z()+accel_measurement_(1)*( 2)*_rotation_t.w()+accel_measurement_(2)*(-2)*_rotation_t.x();
-      J_p_to_q(1,1) = accel_measurement_(0)*( 2)*_rotation_t.y()+accel_measurement_(1)*(-2)*_rotation_t.x()+accel_measurement_(2)*(-2)*_rotation_t.w();
-      J_p_to_q(1,2) = accel_measurement_(0)*( 2)*_rotation_t.x()+accel_measurement_(1)*( 2)*_rotation_t.y()+accel_measurement_(2)*( 2)*_rotation_t.z();
-      J_p_to_q(1,3) = accel_measurement_(0)*( 2)*_rotation_t.w()+accel_measurement_(1)*(-2)*_rotation_t.z()+accel_measurement_(2)*( 2)*_rotation_t.y();
-
-      J_p_to_q(2,0) = accel_measurement_(0)*(-2)*_rotation_t.y()+accel_measurement_(1)*( 2)*_rotation_t.x()+accel_measurement_(2)*( 2)*_rotation_t.w();
-      J_p_to_q(2,1) = accel_measurement_(0)*( 2)*_rotation_t.z()+accel_measurement_(1)*( 2)*_rotation_t.w()+accel_measurement_(2)*(-2)*_rotation_t.x();
-      J_p_to_q(2,2) = accel_measurement_(0)*(-2)*_rotation_t.w()+accel_measurement_(1)*( 2)*_rotation_t.z()+accel_measurement_(2)*(-2)*_rotation_t.y();
-      J_p_to_q(2,3) = accel_measurement_(0)*( 2)*_rotation_t.x()+accel_measurement_(1)*( 2)*_rotation_t.y()+accel_measurement_(2)*( 2)*_rotation_t.z();
-
-
       // position_t1
       if (jacobians[0] != NULL) {
 
@@ -222,9 +205,9 @@ class ImuError :
           }
         }
 
-        J_v_t(1,0) = -dt_;
-        J_v_t(2,1) = -dt_;
-        J_v_t(3,2) = -dt_;
+        J_v_t(0,0) = -dt_;
+        J_v_t(1,1) = -dt_;
+        J_v_t(2,2) = -dt_;
 
         J_v_t(3,0) = -1.0;
         J_v_t(4,1) = -1.0;
@@ -241,6 +224,24 @@ class ImuError :
           }
         }
 
+        // TODO(tsangkai): replace this with matrix operation
+        Eigen::MatrixXd J_p_to_q(3,4);
+        Eigen::Vector3d accel_minus_bias = accel_measurement_ - accel_bias;
+        J_p_to_q(0,0) = accel_minus_bias(0)*( 2)*_rotation_t.w()+accel_minus_bias(1)*(-2)*_rotation_t.z()+accel_minus_bias(2)*( 2)*_rotation_t.y();
+        J_p_to_q(0,1) = accel_minus_bias(0)*( 2)*_rotation_t.x()+accel_minus_bias(1)*( 2)*_rotation_t.y()+accel_minus_bias(2)*( 2)*_rotation_t.z();
+        J_p_to_q(0,2) = accel_minus_bias(0)*(-2)*_rotation_t.y()+accel_minus_bias(1)*( 2)*_rotation_t.x()+accel_minus_bias(2)*( 2)*_rotation_t.w();
+        J_p_to_q(0,3) = accel_minus_bias(0)*(-2)*_rotation_t.z()+accel_minus_bias(1)*(-2)*_rotation_t.w()+accel_minus_bias(2)*( 2)*_rotation_t.x();
+
+        J_p_to_q(1,0) = accel_minus_bias(0)*( 2)*_rotation_t.z()+accel_minus_bias(1)*( 2)*_rotation_t.w()+accel_minus_bias(2)*(-2)*_rotation_t.x();
+        J_p_to_q(1,1) = accel_minus_bias(0)*( 2)*_rotation_t.y()+accel_minus_bias(1)*(-2)*_rotation_t.x()+accel_minus_bias(2)*(-2)*_rotation_t.w();
+        J_p_to_q(1,2) = accel_minus_bias(0)*( 2)*_rotation_t.x()+accel_minus_bias(1)*( 2)*_rotation_t.y()+accel_minus_bias(2)*( 2)*_rotation_t.z();
+        J_p_to_q(1,3) = accel_minus_bias(0)*( 2)*_rotation_t.w()+accel_minus_bias(1)*(-2)*_rotation_t.z()+accel_minus_bias(2)*( 2)*_rotation_t.y();
+
+        J_p_to_q(2,0) = accel_minus_bias(0)*(-2)*_rotation_t.y()+accel_minus_bias(1)*( 2)*_rotation_t.x()+accel_minus_bias(2)*( 2)*_rotation_t.w();
+        J_p_to_q(2,1) = accel_minus_bias(0)*( 2)*_rotation_t.z()+accel_minus_bias(1)*( 2)*_rotation_t.w()+accel_minus_bias(2)*(-2)*_rotation_t.x();
+        J_p_to_q(2,2) = accel_minus_bias(0)*(-2)*_rotation_t.w()+accel_minus_bias(1)*( 2)*_rotation_t.z()+accel_minus_bias(2)*(-2)*_rotation_t.y();
+        J_p_to_q(2,3) = accel_minus_bias(0)*( 2)*_rotation_t.x()+accel_minus_bias(1)*( 2)*_rotation_t.y()+accel_minus_bias(2)*( 2)*_rotation_t.z();
+
         J_q_t(6,0) = -1.0;
         J_q_t(7,1) = -1.0;
         J_q_t(8,2) = -1.0;
@@ -255,7 +256,7 @@ class ImuError :
       }  
     }
 
-    return 1;
+    return true;
   }
 
 

@@ -127,7 +127,7 @@ class ExpLandmarkOptSLAM {
     // experiment configuration file
     cv::FileStorage experiment_config_file(config_folder_path + "config_fpga_p2_euroc.yaml", cv::FileStorage::READ);
 
-    cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];  // from camera frame to body frame
+    cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];            // from camera frame to body frame
 
     Eigen::Matrix4d T_BC;
     T_BC  << T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 

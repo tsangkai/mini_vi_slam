@@ -81,14 +81,13 @@ class ReprojectionError:
     Eigen::Quaterniond rotation(parameters[1][0], parameters[1][1], parameters[1][2], parameters[1][3]);
     Eigen::Vector3d landmark(parameters[2][0], parameters[2][1], parameters[2][2]);
 
-    Eigen::Vector3d rotated_pos = R_cb_ * rotation.toRotationMatrix().transpose() * (landmark - position);
+    Eigen::Vector3d landmark_minus_p = landmark - position;
+    Eigen::Vector3d rotated_pos = R_cb_ * rotation.toRotationMatrix().transpose() * landmark_minus_p;
     
     residuals[0] = focal_ * (- rotated_pos[0] / rotated_pos[2]) + principle_point_[0] - measurement_(0);
     residuals[1] = focal_ * (- rotated_pos[1] / rotated_pos[2]) + principle_point_[1] - measurement_(1);
 
     // TODO(tsangkai): Modeling the covariance effects currently, but needs to be replaced by real covariance matrices
-    residuals[0] = 0.1 * residuals[0] ;
-    residuals[1] = 0.1 * residuals[1] ;
 
 
     /*********************************************************************************
@@ -101,20 +100,19 @@ class ReprojectionError:
     if (jacobians != NULL) {
       
       // chain rule
-      Eigen::MatrixXd J_residual_to_p(2,3);
-      J_residual_to_p(0,0) = focal_ * (-1.0) / position(2);
-      J_residual_to_p(0,1) = 0;
-      J_residual_to_p(0,2) = focal_ * position(0) / (position(2)*position(2));
-      J_residual_to_p(1,0) = 0;
-      J_residual_to_p(1,1) = focal_ * (-1.0) / position(2);
-      J_residual_to_p(1,2) = focal_ * position(1) / (position(2)*position(2));
+      Eigen::MatrixXd J_residual_to_rp(2,3);
+      J_residual_to_rp(0,0) = focal_ * (-1.0) / position(2);
+      J_residual_to_rp(0,1) = 0;
+      J_residual_to_rp(0,2) = focal_ * position(0) / (position(2)*position(2));
+      J_residual_to_rp(1,0) = 0;
+      J_residual_to_rp(1,1) = focal_ * (-1.0) / position(2);
+      J_residual_to_rp(1,2) = focal_ * position(1) / (position(2)*position(2));
 
       // position
       if (jacobians[0] != NULL) {
 
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J0(jacobians[0]);       
-        J0 = -J_residual_to_p * R_cb_ * rotation.toRotationMatrix().transpose();
-        J0 = J0 * 0.01;
+        J0 = -J_residual_to_rp * R_cb_ * rotation.toRotationMatrix().transpose();
       }  
 
       // rotation
@@ -123,36 +121,33 @@ class ReprojectionError:
         Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J1(jacobians[1]);      
 
         Eigen::MatrixXd J_p_to_q(3,4);
-        J_p_to_q(0,0) = landmark(0)*( 2)*rotation.w()+landmark(1)*(-2)*rotation.z()+landmark(2)*( 2)*rotation.y();
-        J_p_to_q(0,1) = landmark(0)*( 2)*rotation.x()+landmark(1)*( 2)*rotation.y()+landmark(2)*( 2)*rotation.z();
-        J_p_to_q(0,2) = landmark(0)*(-2)*rotation.y()+landmark(1)*( 2)*rotation.x()+landmark(2)*( 2)*rotation.w();
-        J_p_to_q(0,3) = landmark(0)*(-2)*rotation.z()+landmark(1)*(-2)*rotation.w()+landmark(2)*( 2)*rotation.x();
+        J_p_to_q(0,0) = landmark_minus_p(0)*( 2)*rotation.w()+landmark_minus_p(1)*( 2)*rotation.z()+landmark_minus_p(2)*(-2)*rotation.y();
+        J_p_to_q(0,1) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
+        J_p_to_q(0,2) = landmark_minus_p(0)*( 2)*rotation.y()+landmark_minus_p(1)*(-2)*rotation.x()+landmark_minus_p(2)*( 2)*rotation.w();
+        J_p_to_q(0,3) = landmark_minus_p(0)*( 2)*rotation.z()+landmark_minus_p(1)*(-2)*rotation.w()+landmark_minus_p(2)*(-2)*rotation.x();
 
-        J_p_to_q(1,0) = landmark(0)*( 2)*rotation.z()+landmark(1)*( 2)*rotation.w()+landmark(2)*(-2)*rotation.x();
-        J_p_to_q(1,1) = landmark(0)*( 2)*rotation.y()+landmark(1)*(-2)*rotation.x()+landmark(2)*(-2)*rotation.w();
-        J_p_to_q(1,2) = landmark(0)*( 2)*rotation.x()+landmark(1)*( 2)*rotation.y()+landmark(2)*( 2)*rotation.z();
-        J_p_to_q(1,3) = landmark(0)*( 2)*rotation.w()+landmark(1)*(-2)*rotation.z()+landmark(2)*( 2)*rotation.y();
+        J_p_to_q(1,0) = landmark_minus_p(0)*(-2)*rotation.z()+landmark_minus_p(1)*( 2)*rotation.w()+landmark_minus_p(2)*( 2)*rotation.x();
+        J_p_to_q(1,1) = landmark_minus_p(0)*(-2)*rotation.y()+landmark_minus_p(1)*( 2)*rotation.x()+landmark_minus_p(2)*(-2)*rotation.w();
+        J_p_to_q(1,2) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
+        J_p_to_q(1,3) = landmark_minus_p(0)*( 2)*rotation.w()+landmark_minus_p(1)*( 2)*rotation.z()+landmark_minus_p(2)*(-2)*rotation.y();
 
-        J_p_to_q(2,0) = landmark(0)*(-2)*rotation.y()+landmark(1)*( 2)*rotation.x()+landmark(2)*( 2)*rotation.w();
-        J_p_to_q(2,1) = landmark(0)*( 2)*rotation.z()+landmark(1)*( 2)*rotation.w()+landmark(2)*(-2)*rotation.x();
-        J_p_to_q(2,2) = landmark(0)*(-2)*rotation.w()+landmark(1)*( 2)*rotation.z()+landmark(2)*(-2)*rotation.y();
-        J_p_to_q(2,3) = landmark(0)*( 2)*rotation.x()+landmark(1)*( 2)*rotation.y()+landmark(2)*( 2)*rotation.z();
+        J_p_to_q(2,0) = landmark_minus_p(0)*( 2)*rotation.y()+landmark_minus_p(1)*(-2)*rotation.x()+landmark_minus_p(2)*( 2)*rotation.w();
+        J_p_to_q(2,1) = landmark_minus_p(0)*(-2)*rotation.z()+landmark_minus_p(1)*( 2)*rotation.w()+landmark_minus_p(2)*( 2)*rotation.x();
+        J_p_to_q(2,2) = landmark_minus_p(0)*(-2)*rotation.w()+landmark_minus_p(1)*(-2)*rotation.z()+landmark_minus_p(2)*( 2)*rotation.y();
+        J_p_to_q(2,3) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
 
-        J1 = J_residual_to_p * R_cb_ * J_p_to_q;
-        J1 = J1 * 0.01;
+        J1 = J_residual_to_rp * R_cb_ * J_p_to_q;
       }  
 
       // landmark
       if (jacobians[2] != NULL) {
 
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J2(jacobians[2]);     
-        J2 = J_residual_to_p * R_cb_ * rotation.toRotationMatrix().transpose();
-        J2 = J2 * 0.01;
+        J2 = J_residual_to_rp * R_cb_ * rotation.toRotationMatrix().transpose();
       }  
     }
 
     return true;
-
   }
 
 
