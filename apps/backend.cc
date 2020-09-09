@@ -124,7 +124,6 @@ class ExpLandmarkOptSLAM {
     time_begin_ = ConverStrTime(test_config_file["time_window"][0]);  
     time_end_ = ConverStrTime(test_config_file["time_window"][1]);  
 
-
     // experiment configuration file
     cv::FileStorage experiment_config_file(config_folder_path + "config_fpga_p2_euroc.yaml", cv::FileStorage::READ);
 
@@ -325,7 +324,9 @@ class ExpLandmarkOptSLAM {
       Eigen::Vector3d accel_plus_gravity = rotation_parameter_.at(i)->estimate().normalized().toRotationMatrix()*(accel_measurement - accel_bias) + gravity;
       Eigen::Vector3d position_t_plus_1 = position_parameter_.at(i)->estimate() + time_diff*velocity_parameter_.at(i)->estimate() + (0.5*time_diff*time_diff)*accel_plus_gravity;
       Eigen::Vector3d velocity_t_plus_1 = velocity_parameter_.at(i)->estimate() + time_diff*accel_plus_gravity;
-      Eigen::Quaterniond rotation_t_plus_1 = rotation_parameter_.at(i)->estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
+      Eigen::Quaterniond rotation_t_plus_1 = rotation_parameter_.at(i)->estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 
+                                                                                                                        0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 
+                                                                                                                        0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
 
       position_parameter_.at(i+1)->setEstimate(position_t_plus_1);
       velocity_parameter_.at(i+1)->setEstimate(velocity_t_plus_1);

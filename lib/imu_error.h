@@ -22,10 +22,6 @@
 // #include <okvis/Parameters.hpp>
 // #include <okvis/ceres/ErrorInterface.hpp>
 
-/// \brief okvis Main namespace of this package.
-// namespace okvis {
-/// \brief ceres Namespace for ceres-related functionality implemented in okvis.
-// namespace ceres {
 
 /// \brief Implements a nonlinear IMU factor.
 class ImuError :
@@ -106,14 +102,21 @@ class ImuError :
     Eigen::Vector3d _velocity_t(parameters[4][0], parameters[4][1], parameters[4][2]);
     Eigen::Quaterniond _rotation_t(parameters[5][0], parameters[5][1], parameters[5][2], parameters[5][3]);
 
+    Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
+    Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
+    Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
+
+    // residual vectors
     Eigen::Map<Eigen::Vector3d > _r_position(residuals+0);      
     Eigen::Map<Eigen::Vector3d > _r_velocity(residuals+3);      
     Eigen::Map<Eigen::Quaterniond > _r_rotation(residuals+6);      
 
-    Eigen::Vector3d _accel_plus_gravity = _rotation_t.normalized().toRotationMatrix()*accel_measurement_ + Eigen::Vector3d(0, 0, -9.81007);
+    Eigen::Vector3d _accel_plus_gravity = _rotation_t.normalized().toRotationMatrix()*(accel_measurement_ - accel_bias) + gravity;
     _r_position = _position_t1 - ( _position_t +  dt_*_velocity_t + (dt_*dt_*0.5)* _accel_plus_gravity);
     _r_velocity = _velocity_t1 - (                    _velocity_t +           dt_* _accel_plus_gravity);
-    _r_rotation = _rotation_t1 * ( _rotation_t * Eigen::Quaterniond(1, 0.5*dt_*gyro_measurement_(0), 0.5*dt_*gyro_measurement_(1), 0.5*dt_*gyro_measurement_(2))).inverse();
+    _r_rotation = _rotation_t1 * ( _rotation_t * Eigen::Quaterniond(1, 0.5*dt_*(gyro_measurement_(0)-gyro_bias(0)), 
+                                                                       0.5*dt_*(gyro_measurement_(1)-gyro_bias(1)), 
+                                                                       0.5*dt_*(gyro_measurement_(2)-gyro_bias(2)))).inverse();
     
 
 
@@ -249,14 +252,8 @@ class ImuError :
             J_q_t(3+i,j) = -(dt_) * J_p_to_q(i,j);
           }
         }
-
       }  
-
-
-
     }
-
-
 
     return 1;
   }
@@ -295,8 +292,5 @@ class ImuError :
   double dt_;
 
 };
-
-// }  // namespace ceres
-// }  // namespace okvis
 
 #endif /* INCLUDE_IMU_ERROR_H_ */

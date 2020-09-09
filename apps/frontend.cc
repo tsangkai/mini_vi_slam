@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
   for (auto iter = boost::filesystem::directory_iterator(path + camera_data_folder);
         iter != boost::filesystem::directory_iterator(); iter++) {
 
-    if (!boost::filesystem::is_directory(iter->path())) {          // we eliminate directories
+    if (!boost::filesystem::is_directory(iter->path())) {           // we eliminate directories
       image_names.push_back(iter->path().filename().string());
     } 
     else
@@ -99,13 +99,13 @@ int main(int argc, char **argv) {
 
   std::sort(image_names.begin(), image_names.end());
 
-  std::vector<CameraData> camera_observation_data;   // image and timestep
+  std::vector<CameraData> camera_observation_data;                  // image and timestep
 
   size_t counter = 0;
   for (auto& image_names_iter: image_names) {	
   
-    if (counter % downsample_rate == 0) {            // downsample images for testing
-      std::string time_stamp_str = image_names_iter.substr(0,19);  // remove ".png"
+    if (counter % downsample_rate == 0) {                           // downsample images for testing
+      std::string time_stamp_str = image_names_iter.substr(0,19);   // remove ".png"
 
       if(time_window_begin <= time_stamp_str && time_stamp_str <= time_window_end) {
         std::string dataFilePath = path + camera_data_folder + image_names_iter;
