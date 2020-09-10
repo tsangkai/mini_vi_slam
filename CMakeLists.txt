@@ -18,7 +18,5 @@ add_subdirectory(apps)
 
 add_subdirectory(lib)
 
-option(BUILD_TEST "Build tests." ON)
-if(BUILD_TEST)
-  add_subdirectory(test)
-endif()
+
+add_subdirectory(test)
