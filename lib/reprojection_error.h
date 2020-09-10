@@ -35,12 +35,12 @@ class ReprojectionError:
 
   // TODO(tsangkai): set camera intrinsic as static class member
   ReprojectionError(const measurement_t & measurement, 
-                    Eigen::Matrix3d R_cb,
+                    Eigen::Transform<double, 3, Eigen::Affine> T_bc,
                     double focal, 
                     double* principle_point) {
     setMeasurement(measurement);
 
-    R_cb_ = R_cb;
+    T_bc_ = T_bc;
     focal_ = focal;
     principle_point_[0] = principle_point[0];
     principle_point_[1] = principle_point[1];
@@ -81,8 +81,11 @@ class ReprojectionError:
     Eigen::Quaterniond rotation(parameters[1][0], parameters[1][1], parameters[1][2], parameters[1][3]);
     Eigen::Vector3d landmark(parameters[2][0], parameters[2][1], parameters[2][2]);
 
-    Eigen::Vector3d landmark_minus_p = landmark - position;
-    Eigen::Vector3d rotated_pos = R_cb_ * rotation.toRotationMatrix().transpose() * landmark_minus_p;
+    Eigen::Matrix3d R_cb = T_bc_.rotation();                      // T_cb
+    Eigen::Vector3d landmark_minus_p = landmark - (T_bc_.inverse().translation() + position);
+    // Eigen::Matrix3d R_cb = T_bc_.rotation().transpose();       // T_bc
+    // Eigen::Vector3d landmark_minus_p = landmark - (T_bc_.translation() + position);
+    Eigen::Vector3d rotated_pos = R_cb * rotation.toRotationMatrix().transpose() * landmark_minus_p;
     
     residuals[0] = focal_ * (- rotated_pos[0] / rotated_pos[2]) + principle_point_[0] - measurement_(0);
     residuals[1] = focal_ * (- rotated_pos[1] / rotated_pos[2]) + principle_point_[1] - measurement_(1);
@@ -112,7 +115,7 @@ class ReprojectionError:
       if (jacobians[0] != NULL) {
 
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J0(jacobians[0]);       
-        J0 = -J_residual_to_rp * R_cb_ * rotation.toRotationMatrix().transpose();
+        J0 = -J_residual_to_rp * R_cb * rotation.toRotationMatrix().transpose();
       }  
 
       // rotation
@@ -136,14 +139,14 @@ class ReprojectionError:
         J_p_to_q(2,2) = landmark_minus_p(0)*(-2)*rotation.w()+landmark_minus_p(1)*(-2)*rotation.z()+landmark_minus_p(2)*( 2)*rotation.y();
         J_p_to_q(2,3) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
 
-        J1 = J_residual_to_rp * R_cb_ * J_p_to_q;
+        J1 = J_residual_to_rp * R_cb * J_p_to_q;
       }  
 
       // landmark
       if (jacobians[2] != NULL) {
 
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J2(jacobians[2]);     
-        J2 = J_residual_to_rp * R_cb_ * rotation.toRotationMatrix().transpose();
+        J2 = J_residual_to_rp * R_cb * rotation.toRotationMatrix().transpose();
       }  
     }
 
@@ -169,7 +172,8 @@ class ReprojectionError:
   // the measurement
   measurement_t measurement_; ///< The (2D) measurement.
 
-  Eigen::Matrix3d R_cb_;
+
+  Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
   double focal_;
   double principle_point_[2];
 

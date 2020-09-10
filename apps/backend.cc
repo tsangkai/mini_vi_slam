@@ -135,7 +135,7 @@ class ExpLandmarkOptSLAM {
              T_BC_node[8],  T_BC_node[9],  T_BC_node[10], T_BC_node[11], 
              T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
 
-    T_BC_ = T_BC;
+    T_bc_ = T_BC;
 
     double focal_length_0 = experiment_config_file["cameras"][0]["focal_length"][0];  // i don't know the unit!!!!
     double focal_length_1 = experiment_config_file["cameras"][0]["focal_length"][1];
@@ -263,7 +263,6 @@ class ExpLandmarkOptSLAM {
           }
 
           output_file << std::endl;
-
         }
       }
     }
@@ -386,7 +385,7 @@ class ExpLandmarkOptSLAM {
       //std::cout << pose_id << ": " << landmark_id << std::endl;
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
-                                                                 T_BC_.rotation().transpose(),
+                                                                 T_bc_,
                                                                  focal_length_,
                                                                  principal_point_);
 
@@ -444,7 +443,7 @@ class ExpLandmarkOptSLAM {
   double time_end_;
 
   // camera intrinsic parameters
-  Eigen::Transform<double, 3, Eigen::Affine> T_BC_;                    // from camera frame to body frame
+  Eigen::Transform<double, 3, Eigen::Affine> T_bc_;                    // from camera frame to body frame
   double focal_length_;
   double principal_point_[2];
 
@@ -486,7 +485,6 @@ int main(int argc, char **argv) {
   slam_problem.ReadObservationData(observation_file_path);
 
   slam_problem.SolveOptimizationProblem();
-
   slam_problem.OutputOptimizationResult("result.csv");
 
   return 0;
