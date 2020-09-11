@@ -8,9 +8,7 @@
 #include <vector>
 
 #include <ceres/ceres.h>
-#include <ceres/rotation.h>
 #include <Eigen/Core>
-#include <Eigen/Geometry>
 
 #include "landmark_parameter_block.h"
 #include "timed_3d_parameter_block.h"
@@ -24,9 +22,12 @@ class TriangularizationProblem {
  public:
 
   TriangularizationProblem() {
-    focal_length_ = 1.0;
+    focal_length_ = 150.0;
     principal_point_[0] = 0;
     principal_point_[1] = 0;
+
+    initial_landmark_position_ = 9 * Eigen::Vector3d(1, 1, 1);  // check between 8 and 9
+    real_landmark_position_ = Eigen::Vector3d(13,13,13);
   }
 
   bool Initialize() {
@@ -39,9 +40,12 @@ class TriangularizationProblem {
     position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(-1,-1,-1), 1, 0.1));
     rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 1, 0.1));
 
+    // state 2
+    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(3,4,-6), 2, 0.2));
+    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 2, 0.2));
+
     // one landmark
-    landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d(23.1,22.1,23.1), 0));
-    landmark.setEstimate(Eigen::Vector3d(13,13,13));
+    landmark_parameter_.push_back(new LandmarkParameterBlock(initial_landmark_position_, 0));
 
     return true;
   }
@@ -49,7 +53,7 @@ class TriangularizationProblem {
   bool SetupOptimizationProblem() {
 
     // add parameter blocks
-    for (size_t i=0; i<2; ++i) {
+    for (size_t i=0; i<3; ++i) {
       optimization_problem_.AddParameterBlock(position_parameter_.at(i)->parameters(), 3);
       optimization_problem_.SetParameterBlockConstant(position_parameter_.at(i)->parameters());
 
@@ -58,18 +62,24 @@ class TriangularizationProblem {
     }
 
     // observation
-    Eigen::Vector2d observation_error;
-    observation_error(0,0) = -0.1;
-    observation_error(1,0) = 0.2;
+    Eigen::Vector2d observation_noise;
+    observation_noise(0,0) = -0.1;
+    observation_noise(1,0) = 0.2;
 
 
     // add constraints
-    for (size_t i=0; i<2; ++i) {
+    for (size_t i=0; i<3; ++i) {
       Eigen::Vector2d observation;
 
-      Eigen::Vector3d temp_observation = rotation_parameter_.at(i)->estimate().inverse().toRotationMatrix()*(landmark.estimate() - position_parameter_.at(i)->estimate());
+      Eigen::Vector3d temp_observation = rotation_parameter_.at(i)->estimate().toRotationMatrix().transpose()*(real_landmark_position_ - position_parameter_.at(i)->estimate());
       observation(0) = -focal_length_*temp_observation(0)/temp_observation(2) + principal_point_[0];
       observation(1) = -focal_length_*temp_observation(1)/temp_observation(2) + principal_point_[1];
+
+
+      std::cout << "observation: " << observation << std::endl;
+
+      observation = observation + observation_noise;
+      std::cout << "observation w. noise: " << observation << std::endl;
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation,
                                                                  Eigen::Transform<double, 3, Eigen::Affine>::Identity(),
@@ -83,6 +93,14 @@ class TriangularizationProblem {
                                              landmark_parameter_.at(0)->parameters()); 
     }
 
+    optimization_problem_.SetParameterLowerBound(landmark_parameter_.at(0)->parameters(), 0, 0.0);
+    optimization_problem_.SetParameterLowerBound(landmark_parameter_.at(0)->parameters(), 1, 0.0);
+    optimization_problem_.SetParameterLowerBound(landmark_parameter_.at(0)->parameters(), 2, 0.0);
+
+    optimization_problem_.SetParameterUpperBound(landmark_parameter_.at(0)->parameters(), 0, 20.0);
+    optimization_problem_.SetParameterUpperBound(landmark_parameter_.at(0)->parameters(), 1, 20.0);
+    optimization_problem_.SetParameterUpperBound(landmark_parameter_.at(0)->parameters(), 2, 20.0);
+
     return true;
   }
 
@@ -92,6 +110,7 @@ class TriangularizationProblem {
 
     optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
     optimization_options_.minimizer_progress_to_stdout = true;
+    optimization_options_.function_tolerance = 1e-9;
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
     std::cout << optimization_summary_.FullReport() << "\n";
@@ -102,8 +121,9 @@ class TriangularizationProblem {
 
   bool OutputOptimizationResult() {
 
-    std::cout << "The true landmark position: " << landmark.estimate() <<  std::endl;
-    std::cout << "The estimated landmark position: " << landmark_parameter_.at(0)->estimate() <<  std::endl;
+    std::cout << "The true landmark position: " << real_landmark_position_.transpose() <<  std::endl;
+    std::cout << "The initial estimated landmark position: " << initial_landmark_position_.transpose() <<  std::endl;
+    std::cout << "The final estimated landmark position: " << landmark_parameter_.at(0)->estimate().transpose() <<  std::endl;
     
     return true;
   }
@@ -116,9 +136,11 @@ class TriangularizationProblem {
 
   // data storage (parameters to be optimized)
   std::vector<TimedQuatParameterBlock*> rotation_parameter_;
-  std::vector<Timed3dParameterBlock*>  position_parameter_;
-  std::vector<LandmarkParameterBlock*> landmark_parameter_;
-  LandmarkParameterBlock landmark;
+  std::vector<Timed3dParameterBlock*>   position_parameter_;
+  std::vector<LandmarkParameterBlock*>  landmark_parameter_;
+
+  Eigen::Vector3d real_landmark_position_;
+  Eigen::Vector3d initial_landmark_position_;
 
   // ceres parameter
   ceres::Problem optimization_problem_;

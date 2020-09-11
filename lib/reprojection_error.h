@@ -87,8 +87,8 @@ class ReprojectionError:
     // Eigen::Vector3d landmark_minus_p = landmark - (T_bc_.translation() + position);
     Eigen::Vector3d rotated_pos = R_cb * rotation.toRotationMatrix().transpose() * landmark_minus_p;
     
-    residuals[0] = focal_ * (- rotated_pos[0] / rotated_pos[2]) + principle_point_[0] - measurement_(0);
-    residuals[1] = focal_ * (- rotated_pos[1] / rotated_pos[2]) + principle_point_[1] - measurement_(1);
+    residuals[0] = -focal_ * rotated_pos(0) / rotated_pos(2) + principle_point_[0] - measurement_(0);
+    residuals[1] = -focal_ * rotated_pos(1) / rotated_pos(2) + principle_point_[1] - measurement_(1);
 
     // TODO(tsangkai): Modeling the covariance effects currently, but needs to be replaced by real covariance matrices
 
@@ -104,12 +104,12 @@ class ReprojectionError:
       
       // chain rule
       Eigen::MatrixXd J_residual_to_rp(2,3);
-      J_residual_to_rp(0,0) = focal_ * (-1.0) / position(2);
+      J_residual_to_rp(0,0) = focal_ * (-1.0) / rotated_pos(2);
       J_residual_to_rp(0,1) = 0;
-      J_residual_to_rp(0,2) = focal_ * position(0) / (position(2)*position(2));
+      J_residual_to_rp(0,2) = focal_ * rotated_pos(0) / (rotated_pos(2)*rotated_pos(2));
       J_residual_to_rp(1,0) = 0;
-      J_residual_to_rp(1,1) = focal_ * (-1.0) / position(2);
-      J_residual_to_rp(1,2) = focal_ * position(1) / (position(2)*position(2));
+      J_residual_to_rp(1,1) = focal_ * (-1.0) / rotated_pos(2);
+      J_residual_to_rp(1,2) = focal_ * rotated_pos(1) / (rotated_pos(2)*rotated_pos(2));
 
       // position
       if (jacobians[0] != NULL) {
