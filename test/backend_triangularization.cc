@@ -33,19 +33,19 @@ class TriangularizationProblem {
   bool Initialize() {
 
     // state 0
-    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0, 0.0));
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(1,1,1), 0, 0.0));
+    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0.0));
+    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(1,1,1), 0.0));
 
     // state 1
-    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 1, 0.1));
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(-1,-1,-1), 1, 0.1));
+    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0.1));
+    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(-1,-1,-1), 0.1));
 
     // state 2
-    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 2, 0.2));
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(3,4,-6), 2, 0.2));
+    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0.2));
+    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(3,4,-6), 0.2));
 
     // one landmark
-    landmark_parameter_.push_back(new LandmarkParameterBlock(initial_landmark_position_, 0));
+    landmark_parameter_.push_back(new LandmarkParameterBlock(initial_landmark_position_));
 
     return true;
   }

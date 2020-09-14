@@ -64,10 +64,8 @@ class Timed3dParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
   /// @param[in] T_WS The pose estimate as T_WS.
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] timestamp The timestamp of this state.
-  Timed3dParameterBlock(const Eigen::Vector3d& point, uint64_t id, 
-                        const double timestamp) {
+  Timed3dParameterBlock(const Eigen::Vector3d& point, const double timestamp) {
     setEstimate(point);
-    setId(id);
     setTimestamp(timestamp);
     setFixed(false);
   }

@@ -66,10 +66,8 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   /// @param[in] T_WS The pose estimate as T_WS.
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] timestamp The timestamp of this state.
-  TimedQuatParameterBlock(const Eigen::Quaterniond& quat, uint64_t id, 
-                          const double timestamp) {
+  TimedQuatParameterBlock(const Eigen::Quaterniond& quat, const double timestamp) {
     setEstimate(quat);
-    setId(id);
     setTimestamp(timestamp);
     setFixed(false);
   }

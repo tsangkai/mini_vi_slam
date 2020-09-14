@@ -46,7 +46,6 @@
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
-#include "sized_parameter_block.h"
 #include "landmark_parameter_block.h"
 #include "timed_3d_parameter_block.h"
 #include "timed_quat_parameter_block.h"
@@ -257,13 +256,13 @@ class BALProblem {
 
     // declare all parameter blocks
     for (int i=0; i < num_poses_; ++i) {
-      rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), i, i));
-      translation_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), i, i));
+      rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), i));
+      translation_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), i));
       camera_parameter_.push_back(new double[3]);
     }
 
     for (int i=0; i < num_landmarks_; ++i) {
-      landmark_parameter_.push_back(LandmarkParameterBlock(Eigen::Vector3d(), i, true));
+      landmark_parameter_.push_back(LandmarkParameterBlock(Eigen::Vector3d(), true));
     }
 
 

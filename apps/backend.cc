@@ -176,7 +176,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_position(std::stod(initial_position_str[0]), std::stod(initial_position_str[1]), std::stod(initial_position_str[2]));
-          position_parameter_.push_back(new Timed3dParameterBlock(initial_position, 0, ConverStrTime(time_stamp_str)));
+          position_parameter_.push_back(new Timed3dParameterBlock(initial_position, ConverStrTime(time_stamp_str)));
           optimization_problem_.AddParameterBlock(position_parameter_.at(0)->parameters(), 3);
           optimization_problem_.SetParameterBlockConstant(position_parameter_.at(0)->parameters());
 
@@ -187,7 +187,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
-          rotation_parameter_.push_back(new TimedQuatParameterBlock(initial_rotation, 0, ConverStrTime(time_stamp_str)));
+          rotation_parameter_.push_back(new TimedQuatParameterBlock(initial_rotation, ConverStrTime(time_stamp_str)));
           optimization_problem_.AddParameterBlock(rotation_parameter_.at(0)->parameters(), 4);
           optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(0)->parameters());
 
@@ -198,7 +198,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_velocity(std::stod(initial_velocity_str[0]), std::stod(initial_velocity_str[1]), std::stod(initial_velocity_str[2]));
-          velocity_parameter_.push_back(new Timed3dParameterBlock(initial_velocity, 0, ConverStrTime(time_stamp_str)));
+          velocity_parameter_.push_back(new Timed3dParameterBlock(initial_velocity, ConverStrTime(time_stamp_str)));
           optimization_problem_.AddParameterBlock(velocity_parameter_.at(0)->parameters(), 3);
           optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(0)->parameters());
 
@@ -300,9 +300,9 @@ class ExpLandmarkOptSLAM {
         imu_data_vec.push_back(imu_data);
 
         if (imu_data_vec.size()>1) {
-          rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond(), imu_data_vec.size()-1, imu_data.GetTimestamp()));
-          position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data_vec.size()-1, imu_data.GetTimestamp()));
-          velocity_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data_vec.size()-1, imu_data.GetTimestamp()));
+          rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond(), imu_data.GetTimestamp()));
+          position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data.GetTimestamp()));
+          velocity_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data.GetTimestamp()));
         }
       }
     }
@@ -381,9 +381,8 @@ class ExpLandmarkOptSLAM {
       }
 
       if (landmark_id >= landmark_parameter_.size()) {
-        landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d(), landmark_id));
+        landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d()));
       }
-      //std::cout << pose_id << ": " << landmark_id << std::endl;
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
                                                                  T_bc_,

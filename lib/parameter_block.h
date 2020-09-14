@@ -51,8 +51,7 @@ class ParameterBlock {
 
   /// @brief Default constructor, assumes not fixed and no local parameterisation.
   ParameterBlock()
-      : id_(0),
-        fixed_(false),
+      : fixed_(false),
         localParameterizationPtr_(0) {
   }
 
@@ -63,11 +62,7 @@ class ParameterBlock {
   /// @name Setters
   /// @{
 
-  /// @brief Set parameter block ID
-  /// @param[in] id A unique ID.
-  void setId(uint64_t id) {
-    id_ = id;
-  }
+
 
   /// @brief Directly set values of this parameter block.
   /// @param[in] parameters Pointer to parameters to be copied into this.
@@ -90,10 +85,6 @@ class ParameterBlock {
   /// @brief Get parameter values.
   virtual const double* parameters() const = 0;
 
-  /// @brief Get parameter block ID.
-  uint64_t id() const {
-    return id_;
-  }
   /// @brief Get the dimension of the parameter block.
   virtual size_t dimension() const = 0;
 
@@ -114,7 +105,6 @@ class ParameterBlock {
 
  protected:
 
-  uint64_t id_;
   bool fixed_;
   const ceres::LocalParameterization* localParameterizationPtr_;
 };

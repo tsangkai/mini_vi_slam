@@ -65,10 +65,8 @@ class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> 
   /// @param[in] point The homogeneous point estimate.
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] initialized Whether or not the 3d position is considered initialised.
-  LandmarkParameterBlock(const Eigen::Vector3d& point, uint64_t id,
-                         bool initialized = true) {
+  LandmarkParameterBlock(const Eigen::Vector3d& point, bool initialized = true) {
     setEstimate(point);
-    setId(id);
     setInitialized(initialized);
     setFixed(false);
   }
