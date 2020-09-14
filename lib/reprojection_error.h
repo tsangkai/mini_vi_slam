@@ -14,15 +14,15 @@
 /// \brief Reprojection error base class.
 class ReprojectionError:
     public ceres::SizedCostFunction<2,     // number of residuals
-        3,                                 // number of parameters in p_t
         4,                                 // number of parameters in q_t
+        3,                                 // number of parameters in p_t
         3> {                               // number of landmark
  public:
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   /// \brief The base class type.
-  typedef ceres::SizedCostFunction<2, 3, 4, 3> base_t;
+  typedef ceres::SizedCostFunction<2, 4, 3, 3> base_t;
 
   /// \brief Number of residuals (2)
   static const int kNumResiduals = 2;
@@ -77,8 +77,8 @@ class ReprojectionError:
                 double* residuals,
                 double** jacobians) const {
 
-    Eigen::Vector3d position(parameters[0][0], parameters[0][1], parameters[0][2]);
-    Eigen::Quaterniond rotation(parameters[1][0], parameters[1][1], parameters[1][2], parameters[1][3]);
+    Eigen::Quaterniond rotation(parameters[0][0], parameters[0][1], parameters[0][2], parameters[0][3]);
+    Eigen::Vector3d position(parameters[1][0], parameters[1][1], parameters[1][2]);
     Eigen::Vector3d landmark(parameters[2][0], parameters[2][1], parameters[2][2]);
 
     Eigen::Matrix3d R_cb = T_bc_.rotation();                      // T_cb
@@ -111,17 +111,10 @@ class ReprojectionError:
       J_residual_to_rp(1,1) = focal_ * (-1.0) / rotated_pos(2);
       J_residual_to_rp(1,2) = focal_ * rotated_pos(1) / (rotated_pos(2)*rotated_pos(2));
 
-      // position
+      // rotation
       if (jacobians[0] != NULL) {
 
-        Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J0(jacobians[0]);       
-        J0 = -J_residual_to_rp * R_cb * rotation.toRotationMatrix().transpose();
-      }  
-
-      // rotation
-      if (jacobians[1] != NULL) {
-
-        Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J1(jacobians[1]);      
+        Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);      
 
         Eigen::MatrixXd J_p_to_q(3,4);
         J_p_to_q(0,0) = landmark_minus_p(0)*( 2)*rotation.w()+landmark_minus_p(1)*( 2)*rotation.z()+landmark_minus_p(2)*(-2)*rotation.y();
@@ -139,8 +132,17 @@ class ReprojectionError:
         J_p_to_q(2,2) = landmark_minus_p(0)*(-2)*rotation.w()+landmark_minus_p(1)*(-2)*rotation.z()+landmark_minus_p(2)*( 2)*rotation.y();
         J_p_to_q(2,3) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
 
-        J1 = J_residual_to_rp * R_cb * J_p_to_q;
+        J0 = J_residual_to_rp * R_cb * J_p_to_q;
       }  
+
+
+      // position
+      if (jacobians[1] != NULL) {
+
+        Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J1(jacobians[1]);       
+        J1 = -J_residual_to_rp * R_cb * rotation.toRotationMatrix().transpose();
+      }  
+
 
       // landmark
       if (jacobians[2] != NULL) {

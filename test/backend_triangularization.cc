@@ -33,16 +33,16 @@ class TriangularizationProblem {
   bool Initialize() {
 
     // state 0
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(1,1,1), 0, 0.0));
     rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0, 0.0));
+    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(1,1,1), 0, 0.0));
 
     // state 1
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(-1,-1,-1), 1, 0.1));
     rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 1, 0.1));
+    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(-1,-1,-1), 1, 0.1));
 
     // state 2
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(3,4,-6), 2, 0.2));
     rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 2, 0.2));
+    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(3,4,-6), 2, 0.2));
 
     // one landmark
     landmark_parameter_.push_back(new LandmarkParameterBlock(initial_landmark_position_, 0));
@@ -66,7 +66,6 @@ class TriangularizationProblem {
     observation_noise(0,0) = -0.1;
     observation_noise(1,0) = 0.2;
 
-
     // add constraints
     for (size_t i=0; i<3; ++i) {
       Eigen::Vector2d observation;
@@ -88,8 +87,8 @@ class TriangularizationProblem {
 
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
-                                             position_parameter_.at(i)->parameters(),
                                              rotation_parameter_.at(i)->parameters(),
+                                             position_parameter_.at(i)->parameters(),
                                              landmark_parameter_.at(0)->parameters()); 
     }
 

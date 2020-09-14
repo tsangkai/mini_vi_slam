@@ -46,12 +46,6 @@
 
 #include "parameter_block.h"
 
-
-/// \brief okvis Main namespace of this package.
-// namespace okvis {
-/// \brief ceres Namespace for ceres-related functionality implemented in okvis.
-// namespace ceres {
-
 /// @brief Base class providing the interface for parameter blocks.
 /// @tparam Dim     Dimension of parameter block
 /// @tparam MinDim  Minimal dimension of parameter block
@@ -60,7 +54,6 @@ template<int Dim, int MinDim, class T>
 class SizedParameterBlock: public ParameterBlock {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  // OKVIS_DEFINE_EXCEPTION(Exception,std::runtime_error)
 
   /// @brief Dimension of the parameter block.
   static const int Dimension = Dim;
@@ -86,12 +79,11 @@ class SizedParameterBlock: public ParameterBlock {
 
   /// @brief Set estimate of this parameter block.
   /// @param[in] estimate The estimate to set this to.
-  virtual void setEstimate(const parameter_t& estimate)=0;
+  virtual void setEstimate(const parameter_t& estimate) = 0;
 
   /// @brief Set exact parameters of this parameter block.
   /// @param[in] parameters The parameters to set this to.
   virtual void setParameters(const double* parameters) {
-    // OKVIS_ASSERT_TRUE_DBG(Exception, parameters != 0, "Null pointer");
     memcpy(parameters_, parameters, Dimension * sizeof(double));
   }
 
@@ -128,27 +120,10 @@ class SizedParameterBlock: public ParameterBlock {
     return MinimalDimension;
   }
 
-  /// @}
-
-  /// @name File read/write - implement in derived class, if needed
-  /// @{
-  /// \brief Reading from file -- not implemented
-  /// virtual bool read(std::istream& /*not implemented: is*/) {
-  ///  return false;
-  ///}
-
-  /// \brief Writing to file -- not implemented
-  /// virtual bool write(std::ostream& /*not implemented: os*/) const {
-  ///  return false;
-  /// }
-  /// @}
-
  protected:
   /// @brief Parameters
   double parameters_[Dimension];
 };
 
-// }  // namespace ceres
-// }  // namespace okvis
 
 #endif /* INCLUDE_SIZED_PARAMETERBLOCK_H_ */

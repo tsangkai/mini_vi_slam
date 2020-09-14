@@ -44,9 +44,6 @@
 #include "sized_parameter_block.h"
 // #include "PoseLocalParameterization.h"
 
-// namespace okvis {
-// namespace ceres{
-
 /// \brief Wraps the parameter block for a pose estimate
 class Timed3dParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
  public:
@@ -105,43 +102,6 @@ class Timed3dParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
     return timestamp_;
   }
 
-  // minimal internal parameterization
-  // x0_plus_Delta=Delta_Chi[+]x0
-  /// \brief Generalization of the addition operation,
-  ///        x_plus_delta = Plus(x, delta)
-  ///        with the condition that Plus(x, 0) = x.
-  /// @param[in] x0 Variable.
-  /// @param[in] Delta_Chi Perturbation.
-  /// @param[out] x0_plus_Delta Perturbed x.
-  // virtual void plus(const double* x0, const double* Delta_Chi, double* x0_plus_Delta) const {
-  //  PoseLocalParameterization::plus(x0,Delta_Chi,x0_plus_Delta);
-  // }
-
-  /// \brief The jacobian of Plus(x, delta) w.r.t delta at delta = 0.
-  /// @param[in] x0 Variable.
-  /// @param[out] jacobian The Jacobian.
-  // virtual void plusJacobian(const double* x0, double* jacobian) const {
-  //  PoseLocalParameterization::plusJacobian(x0,jacobian);
-  // }
-
-  // Delta_Chi=x0_plus_Delta[-]x0
-  /// \brief Computes the minimal difference between a variable x and a perturbed variable x_plus_delta
-  /// @param[in] x0 Variable.
-  /// @param[in] x0_plus_Delta Perturbed variable.
-  /// @param[out] Delta_Chi Minimal difference.
-  /// \return True on success.
-  // virtual void minus(const double* x0, const double* x0_plus_Delta, double* Delta_Chi) const {
-  //   PoseLocalParameterization::minus(x0, x0_plus_Delta, Delta_Chi);
-  // }
-
-  /// \brief Computes the Jacobian from minimal space to naively overparameterised space as used by ceres.
-  /// @param[in] x0 Variable.
-  /// @param[out] jacobian the Jacobian (dimension minDim x dim).
-  /// \return True on success.
-  // virtual void liftJacobian(const double* x0, double* jacobian) const {
-  //   PoseLocalParameterization::liftJacobian(x0,jacobian);
-  // }
-
   /// @brief Return parameter block type as string
   virtual std::string typeInfo() const {return "Timed3dParameterBlock";}
 
@@ -149,7 +109,5 @@ private:
   double timestamp_; ///< Time of this state.
 };
 
-// } // namespace ceres
-// } // namespace okvis
 
 #endif /* INCLUDE_TIMED_3D_PARAMETERBLOCK_H_ */

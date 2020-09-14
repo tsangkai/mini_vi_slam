@@ -36,18 +36,14 @@
  * @author Stefan Leutenegger
  */
 
-#ifndef INCLUDE_LANDMAKRPARAMETERBLOCK_H_
-#define INCLUDE_LANDMAKRPARAMETERBLOCK_H_
+#ifndef INCLUDE_LANDMARK_PARAMETERBLOCK_H_
+#define INCLUDE_LANDMARK_PARAMETERBLOCK_H_
 
 #include <Eigen/Core>
 
 #include "sized_parameter_block.h"
 // #include "LandmarkLocalParameterization.h"
 
-/// \brief okvis Main namespace of this package.
-// namespace okvis {
-/// \brief ceres Namespace for ceres-related functionality implemented in okvis.
-// namespace ceres {
 
 class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
  public:
@@ -110,62 +106,13 @@ class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> 
 
   /// \brief Get initialisaiton status.
   /// \return Whether or not the 3d position is considered initialised.
-  bool initialized() const
-  {
+  bool initialized() const {
     return initialized_;
   }
 
 
-
-
-  /// @}
-
-  // minimal internal parameterization
-  // x0_plus_Delta=Delta_Chi[+]x0
-  /// \brief Generalization of the addition operation,
-  ///        x_plus_delta = Plus(x, delta)
-  ///        with the condition that Plus(x, 0) = x.
-  /// @param[in] x0 Variable.
-  /// @param[in] Delta_Chi Perturbation.
-  /// @param[out] x0_plus_Delta Perturbed x.
-  /// virtual void plus(const double* x0, const double* Delta_Chi,
-  ///                  double* x0_plus_Delta) const
-  ///{
-  ///  LandmarkLocalParameterization::plus(x0, Delta_Chi, x0_plus_Delta);
-  /// }
-
-  /// \brief The jacobian of Plus(x, delta) w.r.t delta at delta = 0.
-  /// @param[in] x0 Variable.
-  /// @param[out] jacobian The Jacobian.
-  /// virtual void plusJacobian(const double* x0, double* jacobian) const
-  /// {
-  ///  LandmarkLocalParameterization::plusJacobian(x0, jacobian);
-  /// }
-
-  // Delta_Chi=x0_plus_Delta[-]x0
-  /// \brief Computes the minimal difference between a variable x and a perturbed variable x_plus_delta
-  /// @param[in] x0 Variable.
-  /// @param[in] x0_plus_Delta Perturbed variable.
-  /// @param[out] Delta_Chi Minimal difference.
-  /// \return True on success.
-  /// virtual void minus(const double* x0, const double* x0_plus_Delta,
-  ///                   double* Delta_Chi) const
-  /// {
-  ///  LandmarkLocalParameterization::minus(x0, x0_plus_Delta, Delta_Chi);
-  ///}
-
-  /// \brief Computes the Jacobian from minimal space to naively overparameterised space as used by ceres.
-  /// @param[in] x0 Variable.
-  /// @param[out] jacobian the Jacobian (dimension minDim x dim).
-  /// \return True on success.
-  /// virtual void liftJacobian(const double* x0, double* jacobian) const
-  /// {
-  ///  LandmarkLocalParameterization::liftJacobian(x0, jacobian);
-  /// }
-
   /// @brief Return parameter block type as string
-  std::string typeInfo() const
-  {
+  std::string typeInfo() const {
     return "LandmarkParameterBlock";
   }
 
@@ -173,8 +120,5 @@ class LandmarkParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> 
   bool initialized_;  ///< Whether or not the 3d position is considered initialised.
 
 };
-
-// }  // namespace ceres
-// }  // namespace okvis
 
 #endif /* INCLUDE_LANDMAKRPARAMETERBLOCK_H_ */
