@@ -345,6 +345,14 @@ class ExpLandmarkOptSLAM {
                                              rotation_parameter_.at(i)->parameters(),
                                              position_parameter_.at(i)->parameters(),
                                              velocity_parameter_.at(i)->parameters());    
+
+      optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 0, -2.8);
+      optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 1,  4.2);
+      optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 2, -1.8);
+
+      optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 0, 1.8);
+      optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 1, 8.8);
+      optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 2, 2.8);
     }
 
     input_file.close();
