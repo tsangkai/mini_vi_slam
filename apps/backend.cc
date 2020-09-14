@@ -389,7 +389,7 @@ class ExpLandmarkOptSLAM {
       }
 
       if (landmark_id >= landmark_parameter_.size()) {
-        landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d()));
+        landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d(-0.5, 5.5, 0.5)+5*Eigen::Vector3d::Random()));
       }
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
@@ -451,7 +451,7 @@ class ExpLandmarkOptSLAM {
   double time_end_;
 
   // camera intrinsic parameters
-  Eigen::Transform<double, 3, Eigen::Affine> T_bc_;                    // from camera frame to body frame
+  Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
   double focal_length_;
   double principal_point_[2];
 
@@ -469,7 +469,6 @@ class ExpLandmarkOptSLAM {
   ceres::Solver::Options optimization_options_;
   ceres::Solver::Summary optimization_summary_;
 };
-
 
 
 int main(int argc, char **argv) {

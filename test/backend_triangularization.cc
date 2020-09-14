@@ -22,11 +22,11 @@ class TriangularizationProblem {
  public:
 
   TriangularizationProblem() {
-    focal_length_ = 150.0;
-    principal_point_[0] = 0;
-    principal_point_[1] = 0;
+    focal_length_ = 458.5;
+    principal_point_[0] = 367.215803962;
+    principal_point_[1] = 248.37534061;
 
-    initial_landmark_position_ = 9 * Eigen::Vector3d(1, 1, 1);  // check between 8 and 9
+    initial_landmark_position_ = 10.5 * Eigen::Vector3d(1, 1, 1);  // check between 8 and 9
     real_landmark_position_ = Eigen::Vector3d(13,13,13);
   }
 
@@ -62,24 +62,27 @@ class TriangularizationProblem {
     }
 
     // observation
-    Eigen::Vector2d observation_noise;
-    observation_noise(0,0) = -0.1;
-    observation_noise(1,0) = 0.2;
-
-    // add constraints
     for (size_t i=0; i<3; ++i) {
       Eigen::Vector2d observation;
 
-      Eigen::Vector3d temp_observation = rotation_parameter_.at(i)->estimate().toRotationMatrix().transpose()*(real_landmark_position_ - position_parameter_.at(i)->estimate());
-      observation(0) = -focal_length_*temp_observation(0)/temp_observation(2) + principal_point_[0];
-      observation(1) = -focal_length_*temp_observation(1)/temp_observation(2) + principal_point_[1];
+      Eigen::Transform<double, 3, Eigen::Affine> T_nb = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
+      T_nb.rotate(rotation_parameter_.at(i)->estimate());
+      T_nb.translate(position_parameter_.at(i)->estimate());
+
+      Eigen::Vector3d landmark_c = T_nb.inverse() * real_landmark_position_;
+
+      observation(0) = -focal_length_*landmark_c(0)/landmark_c(2) + principal_point_[0];
+      observation(1) = -focal_length_*landmark_c(1)/landmark_c(2) + principal_point_[1];
 
 
       std::cout << "observation: " << observation << std::endl;
 
+      Eigen::Vector2d observation_noise = Eigen::Vector2d::Random();
       observation = observation + observation_noise;
+
       std::cout << "observation w. noise: " << observation << std::endl;
 
+      // establish constraints
       ceres::CostFunction* cost_function = new ReprojectionError(observation,
                                                                  Eigen::Transform<double, 3, Eigen::Affine>::Identity(),
                                                                  focal_length_,
