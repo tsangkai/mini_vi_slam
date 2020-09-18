@@ -13,9 +13,9 @@
 #include <opencv2/calib3d.hpp>
 
 
-class CameraData {
+class TimedImageData {
  public:
-  CameraData(std::string timestamp_str, std::string data_file_path) {
+  TimedImageData(std::string timestamp_str, std::string data_file_path) {
     timestamp_ = timestamp_str;
     image_ = cv::imread(data_file_path, cv::IMREAD_GRAYSCALE);
   }
@@ -62,68 +62,102 @@ class CVKeypoint {
   size_t hash_value_;
 };
 
+class Frontend {
+
+ public:
+  Frontend(std::string config_file_path) {
+  
+    cv::FileStorage config_file(config_file_path, cv::FileStorage::READ);
+
+    time_window_begin_ = std::string(config_file["time_window"][0]);
+    time_window_end_ = std::string(config_file["time_window"][1]);
+    downsample_rate_ = (size_t)(int)(config_file["frontend"]["downsample_rate"]);
+
+    std::cout << "Consider from " << time_window_begin_ << " to " << time_window_end_ << ": " << std::endl;
+  }
+
+  bool ReadImages(std::string image_folder_path) {
+
+    // boost allows us to work on image files directly
+    for (auto iter = boost::filesystem::directory_iterator(image_folder_path);
+          iter != boost::filesystem::directory_iterator(); iter++) {
+
+      if (!boost::filesystem::is_directory(iter->path())) {           // we eliminate directories
+        image_names_.push_back(iter->path().filename().string());
+      } 
+      else
+        continue;
+    }
+
+    std::sort(image_names_.begin(), image_names_.end());
+
+    size_t counter = 0;
+    size_t selected_counter = 0;
+
+    for (auto& image_names_iter: image_names_) { 
+    
+      if (counter % downsample_rate_ == 0) {                           // downsample images for testing
+        std::string time_stamp_str = image_names_iter.substr(0,19);    // remove ".png"
+
+        if(time_window_begin_ <= time_stamp_str && time_stamp_str <= time_window_end_) {
+          std::string image_file_path = image_folder_path + image_names_iter;
+          image_data_.push_back(TimedImageData(time_stamp_str, image_file_path));
+
+          // cv::imshow(time_stamp_str, image_data_.back().GetImage());
+          // cv::waitKey(100);
+
+          selected_counter++;
+        }
+      }
+
+      counter++;
+    }
+
+    std::cout << "number of processed images: " << selected_counter << std::endl;
+
+    cv::imshow("0 " + image_data_.at(0).GetTimestamp(), image_data_.at(0).GetImage());
+    cv::imshow("1 " + image_data_.at(1).GetTimestamp(), image_data_.at(1).GetImage());
+    cv::imshow("2 " + image_data_.at(2).GetTimestamp(), image_data_.at(2).GetImage());
+
+
+
+    cv::waitKey();
+
+    return true;
+  }
+
+
+
+ private: 
+  std::string time_window_begin_;
+  std::string time_window_end_;
+  size_t downsample_rate_;
+
+  std::vector<std::string> image_names_;
+  std::vector<TimedImageData> image_data_;                
+
+
+};
+
 int main(int argc, char **argv) {
 
   /*** Step 0. Read configuration file ***/
 
-  // for yaml file
   std::string config_file_path("../config/test.yaml");
-  cv::FileStorage config_file(config_file_path, cv::FileStorage::READ);
+  Frontend frontend(config_file_path);                     // read configuration file
 
-  std::string time_window_begin(config_file["time_window"][0]);
-  std::string time_window_end(config_file["time_window"][1]);
-
-  size_t downsample_rate = (size_t)(int)(config_file["frontend"]["downsample_rate"]);
-
-  std::cout << "Consider from " << time_window_begin << " to " << time_window_end << ": " << std::endl;
 
   /*** Step 1. Read image files ***/
 
-  // the folder path
   // std::string path(argv[1]);
   std::string path("../../../dataset/mav0/");
   std::string camera_data_folder("cam0/data/");
 
-  std::vector<std::string> image_names;
-
-  // boost allows us to work on image files directly
-  for (auto iter = boost::filesystem::directory_iterator(path + camera_data_folder);
-        iter != boost::filesystem::directory_iterator(); iter++) {
-
-    if (!boost::filesystem::is_directory(iter->path())) {           // we eliminate directories
-      image_names.push_back(iter->path().filename().string());
-    } 
-    else
-      continue;
-  }
-
-  std::sort(image_names.begin(), image_names.end());
-
-  std::vector<CameraData> camera_observation_data;                  // image and timestep
-
-  size_t counter = 0;
-  for (auto& image_names_iter: image_names) {	
-  
-    if (counter % downsample_rate == 0) {                           // downsample images for testing
-      std::string time_stamp_str = image_names_iter.substr(0,19);   // remove ".png"
-
-      if(time_window_begin <= time_stamp_str && time_stamp_str <= time_window_end) {
-        std::string dataFilePath = path + camera_data_folder + image_names_iter;
-        camera_observation_data.push_back(CameraData(time_stamp_str, dataFilePath));
-
-        // cv::imshow(time_stamp_str, camera_observation_data.back().GetImage());
-        // cv::waitKey(100);
-      }
-    }
-
-    counter++;
-  }
-
-  size_t num_of_cam_observations = camera_observation_data.size();
+  frontend.ReadImages(path+camera_data_folder);
 
 
   /*** Step 2. Extract features ***/
-
+  /***
   std::shared_ptr<cv::FeatureDetector> brisk_detector =
     cv::BRISK::create(60, 0, 1.0f);
 
@@ -142,9 +176,10 @@ int main(int argc, char **argv) {
       image_keypoints.at(i), 
       image_descriptions.at(i));
   }
+  ***/
 
   /*** Step 3. Match features ***/
-
+  /***
   std::shared_ptr<cv::DescriptorMatcher> matcher = 
     cv::DescriptorMatcher::create(cv::DescriptorMatcher::BRUTEFORCE_HAMMING);
 
@@ -169,10 +204,11 @@ int main(int argc, char **argv) {
     cv::imshow("Matches between " + std::to_string(i) + " and " + std::to_string(i+1), img_w_matches);
     cv::waitKey();
   }
+  ***/
 
 
   /*** Step 4. Obtain feature observation ***/
-
+  /***
   std::map<CVKeypoint, size_t> pre_landmark_lookup_table;       // keypoint and landmark id
   std::map<CVKeypoint, size_t> next_landmark_lookup_table;
 
@@ -215,10 +251,11 @@ int main(int argc, char **argv) {
     std::swap(pre_landmark_lookup_table, next_landmark_lookup_table);
     next_landmark_lookup_table.clear();
   }
+  ***/
 
 
   /*** Step 5. Output observation ***/
-
+  /***
   std::ofstream output_file;
   output_file.open ("feature_observation.csv");
   output_file << "timestamp [ns], landmark id, u [pixel], v [pixel]\n";
@@ -229,5 +266,7 @@ int main(int argc, char **argv) {
   }
   
   output_file.close();
+  ***/
+
   return 0;
 }
