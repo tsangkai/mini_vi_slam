@@ -115,11 +115,13 @@ class Frontend {
 
     std::cout << "number of processed images: " << selected_counter << std::endl;
 
-    cv::imshow("0 " + image_data_.at(0).GetTimestamp(), image_data_.at(0).GetImage());
-    cv::imshow("1 " + image_data_.at(1).GetTimestamp(), image_data_.at(1).GetImage());
-    cv::imshow("2 " + image_data_.at(2).GetTimestamp(), image_data_.at(2).GetImage());
-
-
+    // for visual debugging
+    // loop closure observed
+    for (size_t i=0; i<image_data_.size(); ++i) {
+      if (i % 5 == 0) {
+        cv::imshow(std::to_string(i) + " " + image_data_.at(i).GetTimestamp(), image_data_.at(i).GetImage());
+      }
+    }
 
     cv::waitKey();
 
