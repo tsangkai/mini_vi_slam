@@ -188,9 +188,6 @@ class ReprojectionError:
   Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
   double focal_;
   double principle_point_[2];
-
-
- 
 };
 
 #endif /* INCLUDE_REPROJECTION_ERROR_H_ */
