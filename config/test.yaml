@@ -1,7 +1,7 @@
 %YAML:1.0
 
-# time_window: ["1403636649313555456", "1403636658963555584"]   # initial trial
-time_window: ["1403636665000000000", "1403636722000000000"]     # from ground_truth_process
+time_window: ["1403636649313555456", "1403636658963555584"]   # initial trial
+# time_window: ["1403636665000000000", "1403636722000000000"]     # from ground_truth_process
 
 frontend:
   downsample_rate: 10

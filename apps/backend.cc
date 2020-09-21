@@ -338,7 +338,7 @@ class ExpLandmarkOptSLAM {
 
       // for testing, 
       // equivalent to triangularization
-
+      /***
       optimization_problem_.AddParameterBlock(rotation_parameter_.at(i+1)->parameters(), 4);
       optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(i+1)->parameters());
 
@@ -347,6 +347,7 @@ class ExpLandmarkOptSLAM {
 
       optimization_problem_.AddParameterBlock(velocity_parameter_.at(i+1)->parameters(), 3);
       optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(i+1)->parameters());
+      ***/
       // for testing
 
       
