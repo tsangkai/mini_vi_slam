@@ -333,22 +333,6 @@ class ExpLandmarkOptSLAM {
       rotation_parameter_.at(i+1)->setEstimate(rotation_t_plus_1);
       position_parameter_.at(i+1)->setEstimate(position_t_plus_1);
       velocity_parameter_.at(i+1)->setEstimate(velocity_t_plus_1);
-
-      
-      /***
-      // for testing, 
-      // equivalent to triangularization
-      optimization_problem_.AddParameterBlock(rotation_parameter_.at(i+1)->parameters(), 4);
-      optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(i+1)->parameters());
-
-      optimization_problem_.AddParameterBlock(position_parameter_.at(i+1)->parameters(), 3);
-      optimization_problem_.SetParameterBlockConstant(position_parameter_.at(i+1)->parameters());
-
-      optimization_problem_.AddParameterBlock(velocity_parameter_.at(i+1)->parameters(), 3);
-      optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(i+1)->parameters());
-      // for testing
-      ***/
-
       
       // add constraints
       ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).GetGyroMeasurement(),
@@ -410,8 +394,8 @@ class ExpLandmarkOptSLAM {
         landmark_parameter_.resize(landmark_id+1);
       }
 
-      landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0));
-      // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d()+10*Eigen::Vector3d::Random());
+      // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0));
+      landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
                                                                  T_bc_,
@@ -443,6 +427,42 @@ class ExpLandmarkOptSLAM {
   }
 
 
+  bool SolveOptimizationProblemTest() {
+
+    std::cout << "Begin solving the optimization problem." << std::endl;
+
+    // Step 1: triangularization (set trajectory constant)
+    optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
+    optimization_options_.minimizer_progress_to_stdout = true;
+    optimization_options_.num_threads = 6;
+    optimization_options_.max_num_iterations = 26;
+    optimization_options_.function_tolerance = 1e-9;
+
+    for (size_t i=1; i<position_parameter_.size(); ++i) {
+      optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(i)->parameters());
+      optimization_problem_.SetParameterBlockConstant(position_parameter_.at(i)->parameters());
+      optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(i)->parameters());
+    }
+
+    ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
+    std::cout << optimization_summary_.FullReport() << "\n";
+
+
+    // Step 2: optimize
+    optimization_options_.max_num_iterations = 30;
+
+    for (size_t i=1; i<position_parameter_.size(); ++i) {
+      optimization_problem_.SetParameterBlockVariable(rotation_parameter_.at(i)->parameters());
+      optimization_problem_.SetParameterBlockVariable(position_parameter_.at(i)->parameters());
+      optimization_problem_.SetParameterBlockVariable(velocity_parameter_.at(i)->parameters());
+    }
+
+    ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
+    std::cout << optimization_summary_.FullReport() << "\n";
+
+    return true;
+  }
+
   bool SolveOptimizationProblem() {
 
     std::cout << "Begin solving the optimization problem." << std::endl;
@@ -455,22 +475,6 @@ class ExpLandmarkOptSLAM {
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
     std::cout << optimization_summary_.FullReport() << "\n";
-
-    /***
-    // for testing
-    for (size_t i=1; i<position_parameter_.size(); ++i) {
-      optimization_problem_.SetParameterBlockVariable(rotation_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockVariable(position_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockVariable(velocity_parameter_.at(i)->parameters());
-    }
-    for (size_t i=0; i<landmark_parameter_.size(); ++i) {
-      optimization_problem_.SetParameterBlockConstant(landmark_parameter_.at(i)->parameters());
-    }
-
-    ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
-    std::cout << optimization_summary_.FullReport() << "\n";
-    // for testing
-    ***/
 
     return true;
   }
@@ -556,7 +560,9 @@ int main(int argc, char **argv) {
   std::string observation_file_path = "feature_observation.csv";
   slam_problem.ReadObservationData(observation_file_path);
 
-  slam_problem.SolveOptimizationProblem();
+  slam_problem.SolveOptimizationProblemTest();
+
+  // slam_problem.SolveOptimizationProblem();
   slam_problem.OutputOptimizationResult();
 
   return 0;

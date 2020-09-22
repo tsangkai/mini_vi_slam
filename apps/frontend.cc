@@ -148,7 +148,7 @@ class Frontend {
         matcher->match(image_descriptions_.at(i), image_descriptions_.at(j), image_keypoint_temp_matches);
 
         for (size_t k=0; k<image_keypoint_temp_matches.size(); k++) {
-          if (image_keypoint_temp_matches[k].distance < 60) {
+          if (image_keypoint_temp_matches[k].distance < 30) {   // 60
             image_keypoint_matches_.at(i).at(j).push_back(image_keypoint_temp_matches[k]);
           }
         }  
@@ -213,9 +213,9 @@ class Frontend {
         if (landmark_id_table_.at(i)[k]!=0) {
           
           std::string output_str = image_data_.at(i).GetTimestamp() + "," 
-                              + std::to_string(landmark_id_table_.at(i)[k]) + ","
-                              + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
-                              + std::to_string(image_keypoints_.at(i).at(k).pt.y) + "\n";
+                                   + std::to_string(landmark_id_table_.at(i)[k]) + ","
+                                   + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
+                                   + std::to_string(image_keypoints_.at(i).at(k).pt.y) + "\n";
           output_file << output_str;
                     
         }
