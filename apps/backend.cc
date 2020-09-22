@@ -335,10 +335,9 @@ class ExpLandmarkOptSLAM {
       velocity_parameter_.at(i+1)->setEstimate(velocity_t_plus_1);
 
       
-
+      /***
       // for testing, 
       // equivalent to triangularization
-      /***
       optimization_problem_.AddParameterBlock(rotation_parameter_.at(i+1)->parameters(), 4);
       optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(i+1)->parameters());
 
@@ -347,8 +346,8 @@ class ExpLandmarkOptSLAM {
 
       optimization_problem_.AddParameterBlock(velocity_parameter_.at(i+1)->parameters(), 3);
       optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(i+1)->parameters());
-      ***/
       // for testing
+      ***/
 
       
       // add constraints
@@ -408,9 +407,11 @@ class ExpLandmarkOptSLAM {
       }
 
       if (landmark_id >= landmark_parameter_.size()) {
-        landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0)));
-        // landmark_parameter_.push_back(new LandmarkParameterBlock(Eigen::Vector3d()+100*Eigen::Vector3d::Random()));
+        landmark_parameter_.resize(landmark_id+1);
       }
+
+      landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0));
+      // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d()+10*Eigen::Vector3d::Random());
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
                                                                  T_bc_,

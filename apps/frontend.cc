@@ -33,34 +33,6 @@ class TimedImageData {
   cv::Mat image_;
 };
 
-// This class wraps cv::KeyPoint in order to use std::map
-class CVKeypoint {
- public:
- 	CVKeypoint(cv::KeyPoint keypoint) {
- 		keypoint_ = keypoint;
- 		hash_value_ = keypoint.hash();
- 	}
-
-  float GetU() {
-  	return keypoint_.pt.x;
-  }
-
-  float GetV() {
-  	return keypoint_.pt.y;
-  }
-
- 	bool operator==(const CVKeypoint& kp) const{
-    return hash_value_ == kp.hash_value_;
- 	}
-
- 	bool operator<(const CVKeypoint& kp) const{
-    return hash_value_ < kp.hash_value_;
- 	}
-
- private:
-  cv::KeyPoint keypoint_;
-  size_t hash_value_;
-};
 
 class Frontend {
 
@@ -163,79 +135,65 @@ class Frontend {
 
     size_t num_of_images = image_data_.size();
 
-    
+    image_keypoint_matches_.resize(num_of_images);
+    for (size_t i=0; i<num_of_images; i++) {
+      image_keypoint_matches_.at(i) = std::vector<std::vector<cv::DMatch>>(num_of_images);
+    }
 
-    std::vector<std::vector<cv::DMatch>> image_keypoint_temp_matches(num_of_images-1);
-    image_keypoint_matches_.resize(num_of_images-1);
+    for (size_t i=0; i<num_of_images; i++) {
+      for (size_t j=i+1; j<num_of_images; j++) {
 
-    for (size_t i=0; i<num_of_images-1; i++) {
+        std::vector<cv::DMatch> image_keypoint_temp_matches;
+  
+        matcher->match(image_descriptions_.at(i), image_descriptions_.at(j), image_keypoint_temp_matches);
 
-      matcher->match(image_descriptions_.at(i), image_descriptions_.at(i+1), image_keypoint_temp_matches.at(i));
+        for (size_t k=0; k<image_keypoint_temp_matches.size(); k++) {
+          if (image_keypoint_temp_matches[k].distance < 60) {
+            image_keypoint_matches_.at(i).at(j).push_back(image_keypoint_temp_matches[k]);
+          }
+        }  
 
-      for (size_t k=0; k<image_keypoint_temp_matches.at(i).size(); k++) {
-        if (image_keypoint_temp_matches.at(i)[k].distance < 50) {
-          image_keypoint_matches_.at(i).push_back(image_keypoint_temp_matches.at(i)[k]);
-        }
+        /***
+        cv::Mat img_w_matches;
+        cv::drawMatches(image_data_.at(i).GetImage(), image_keypoints_.at(i),
+                      image_data_.at(j).GetImage(), image_keypoints_.at(j),
+                      image_keypoint_matches_.at(i).at(j), img_w_matches);
+
+        cv::imshow("Matches between " + std::to_string(i) + " and " + std::to_string(j), img_w_matches);
+        cv::waitKey();
+        ***/
+          
       }
+    }
 
-      /***
-      cv::Mat img_w_matches;
-      cv::drawMatches(image_data_.at(i).GetImage(), image_keypoints_.at(i),
-                      image_data_.at(i+1).GetImage(), image_keypoints_.at(i+1),
-                      image_keypoint_matches_.at(i), img_w_matches);
-
-      cv::imshow("Matches between " + std::to_string(i) + " and " + std::to_string(i+1), img_w_matches);
-      cv::waitKey();
-      ***/
+    size_t landmark_count = 0;
+    landmark_id_table_.resize(num_of_images);
+    for (size_t i=0; i<num_of_images; i++) {
+      // initialize landmark id table
+      landmark_id_table_.at(i) = std::vector<size_t> (image_keypoints_.at(i).size(), 0);    
     }
 
 
-    //===============================================//
+    for (size_t i=0; i<num_of_images; i++) {
+      for (size_t j=i+1; j<num_of_images; j++) {
+        for (size_t k=0; k<image_keypoint_matches_.at(i).at(j).size(); k++) {
+          
+          size_t query_idx = image_keypoint_matches_.at(i).at(j)[k].queryIdx;
+          size_t train_idx = image_keypoint_matches_.at(i).at(j)[k].trainIdx;
 
-
-    std::map<CVKeypoint, size_t> pre_landmark_lookup_table;       // keypoint and landmark id
-    std::map<CVKeypoint, size_t> next_landmark_lookup_table;
-
-
-    size_t landmakr_id_count = 0;
-    size_t landmark_id = 0;
-
-    for (size_t i=0; i<image_keypoint_matches_.size(); i++) {
-      for (size_t m=0; m<image_keypoint_matches_.at(i).size(); m++) {
-      
-        size_t pre_keypoint_id = image_keypoint_matches_.at(i)[m].queryIdx;
-        size_t next_keypoint_id = image_keypoint_matches_.at(i)[m].trainIdx;
-
-        CVKeypoint pre_keypoint = CVKeypoint(image_keypoints_.at(i)[pre_keypoint_id]);
-        CVKeypoint next_keypoint = CVKeypoint(image_keypoints_.at(i+1)[next_keypoint_id]);
-
-        auto iterr = pre_landmark_lookup_table.find(pre_keypoint);
-        if (iterr == pre_landmark_lookup_table.end()) {
-
-          landmark_id = landmakr_id_count;
-
-          pre_landmark_lookup_table.insert(std::pair<CVKeypoint, size_t>(pre_keypoint, landmark_id));
-          ++landmakr_id_count;
+          if (landmark_id_table_.at(i)[query_idx] == 0) {
+            landmark_count++;
+            landmark_id_table_.at(i)[query_idx] = landmark_count;
+            landmark_id_table_.at(j)[train_idx] = landmark_count;
+          }
+          else {
+            landmark_id_table_.at(j)[train_idx] = landmark_id_table_.at(i)[query_idx];
+          }
         }
-        else {
-          landmark_id = iterr->second;
-        }       
-
-        // output
-        // timestamp [ns], landmark id, u [pixel], v [pixel]
-        std::string output_str = image_data_.at(i).GetTimestamp() + "," + std::to_string(landmark_id+1) + ","
-                              + std::to_string(pre_keypoint.GetU()) + "," + std::to_string(pre_keypoint.GetV()) + "\n";
-        output_feature_observation_.push_back(output_str);
-        // output_file << output_str;
-
-        next_landmark_lookup_table.insert(std::pair<CVKeypoint, size_t>(next_keypoint, landmark_id));
       }
-
-      std::swap(pre_landmark_lookup_table, next_landmark_lookup_table);
-      next_landmark_lookup_table.clear();
     }
 
-    //===============================================//
+    std::cout << "total landmark counts: " << landmark_count << std::endl;
 
     return true;
   }
@@ -243,14 +201,25 @@ class Frontend {
 
   bool OutputFeatureObservation(std::string output_file_str) {
 
-
     std::ofstream output_file;
     output_file.open(output_file_str);
     output_file << "timestamp [ns], landmark id, u [pixel], v [pixel]\n";
   
-    for (auto& output_str: output_feature_observation_) { 
-      // timestamp [ns], landmark id, u [pixel], v [pixel]
-      output_file << output_str;
+    
+    size_t num_of_images = image_data_.size();
+
+    for (size_t i=0; i<num_of_images; i++) {
+      for (size_t k=0; k<image_keypoints_.at(i).size(); ++k) {
+        if (landmark_id_table_.at(i)[k]!=0) {
+          
+          std::string output_str = image_data_.at(i).GetTimestamp() + "," 
+                              + std::to_string(landmark_id_table_.at(i)[k]) + ","
+                              + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
+                              + std::to_string(image_keypoints_.at(i).at(k).pt.y) + "\n";
+          output_file << output_str;
+                    
+        }
+      }
     }
   
     output_file.close();
@@ -269,9 +238,9 @@ class Frontend {
   std::vector<std::vector<cv::KeyPoint>> image_keypoints_;
   std::vector<cv::Mat> image_descriptions_;           
 
-  std::vector<std::vector<cv::DMatch>> image_keypoint_matches_;
+  std::vector<std::vector<std::vector<cv::DMatch>>> image_keypoint_matches_;
 
-  std::vector<std::string> output_feature_observation_;
+  std::vector<std::vector<size_t>> landmark_id_table_;
 };
 
 int main(int argc, char **argv) {
@@ -304,10 +273,7 @@ int main(int argc, char **argv) {
   frontend.MatchFeatures(bf_hamming_matcher);
 
 
-  /*** Step 4. Obtain feature observation ***/
-
-  /*** Step 5. Output observation ***/
-
+  /*** Step 4. Output observation ***/
   std::string output_file_str("feature_observation.csv");
   frontend.OutputFeatureObservation(output_file_str);
 
