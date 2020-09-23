@@ -109,7 +109,6 @@ class Frontend {
     image_keypoints_.resize(num_of_images);
     image_descriptions_.resize(num_of_images);
 
-
     for (size_t i=0; i<num_of_images; i++) {  
 
       detector->detect(image_data_.at(i).GetImage(), image_keypoints_.at(i));
@@ -140,6 +139,7 @@ class Frontend {
       image_keypoint_matches_.at(i) = std::vector<std::vector<cv::DMatch>>(num_of_images);
     }
 
+    // call opencv matcher
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t j=i+1; j<num_of_images; j++) {
 
@@ -147,8 +147,9 @@ class Frontend {
   
         matcher->match(image_descriptions_.at(i), image_descriptions_.at(j), image_keypoint_temp_matches);
 
+        // keep the matches that have smaller distance
         for (size_t k=0; k<image_keypoint_temp_matches.size(); k++) {
-          if (image_keypoint_temp_matches[k].distance < 30) {   // 60
+          if (image_keypoint_temp_matches[k].distance < 40) {   // 60
             image_keypoint_matches_.at(i).at(j).push_back(image_keypoint_temp_matches[k]);
           }
         }  
@@ -162,17 +163,19 @@ class Frontend {
         cv::imshow("Matches between " + std::to_string(i) + " and " + std::to_string(j), img_w_matches);
         cv::waitKey();
         ***/
-          
       }
     }
 
+
+    // assign landmark id to each matched features
+    size_t lll = 0;
     size_t landmark_count = 0;
     landmark_id_table_.resize(num_of_images);
     for (size_t i=0; i<num_of_images; i++) {
-      // initialize landmark id table
       landmark_id_table_.at(i) = std::vector<size_t> (image_keypoints_.at(i).size(), 0);    
     }
 
+    std::map<size_t, size_t> reduced_map;
 
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t j=i+1; j<num_of_images; j++) {
@@ -181,19 +184,66 @@ class Frontend {
           size_t query_idx = image_keypoint_matches_.at(i).at(j)[k].queryIdx;
           size_t train_idx = image_keypoint_matches_.at(i).at(j)[k].trainIdx;
 
-          if (landmark_id_table_.at(i)[query_idx] == 0) {
+          
+          if (landmark_id_table_.at(i)[query_idx] == 0 && landmark_id_table_.at(j)[train_idx] == 0) {
             landmark_count++;
             landmark_id_table_.at(i)[query_idx] = landmark_count;
             landmark_id_table_.at(j)[train_idx] = landmark_count;
           }
-          else {
+          else if (landmark_id_table_.at(i)[query_idx] > 0  && landmark_id_table_.at(j)[train_idx] == 0) {
             landmark_id_table_.at(j)[train_idx] = landmark_id_table_.at(i)[query_idx];
+          }
+          else if (landmark_id_table_.at(i)[query_idx] == 0  && landmark_id_table_.at(j)[train_idx] > 0) {
+            landmark_id_table_.at(i)[query_idx] = landmark_id_table_.at(j)[train_idx];
+          }
+          else if (landmark_id_table_.at(i)[query_idx] != landmark_id_table_.at(j)[train_idx]) {
+            std::cout << "image " << i << ": " << landmark_id_table_.at(i)[query_idx] << std::endl;
+            std::cout << "image " << j << ": " << landmark_id_table_.at(j)[train_idx] << std::endl;
+            std::cout << ++lll << std::endl;
+
+            size_t _min = std::min(landmark_id_table_.at(i)[query_idx], landmark_id_table_.at(j)[train_idx]);
+            size_t _max = std::max(landmark_id_table_.at(i)[query_idx], landmark_id_table_.at(j)[train_idx]);
+
           }
         }
       }
     }
 
+    // count the number of observations for each landmark/feature
+    std::vector<size_t> landmark_obs_count(landmark_count, 0);
+
+    for (size_t i=0; i<num_of_images; i++) {
+      for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
+        if (landmark_id_table_.at(i)[k] > 0)
+
+
+          landmark_obs_count.at(landmark_id_table_.at(i)[k]-1)++;
+      }
+    }
+
+
+    // keep only those landmarks observed often
+    size_t observation_count_threshold = 3;
+    size_t landmark_count_after_threshold = 0;
+    std::vector<size_t> landmark_id_2_id_table(landmark_count, 0);
+
+    for (size_t i=0; i<landmark_count; i++) {
+      if (landmark_obs_count.at(i) > observation_count_threshold) {
+        landmark_count_after_threshold++;
+        landmark_id_2_id_table.at(i) = landmark_count_after_threshold;
+      }
+    }
+
+    for (size_t i=0; i<num_of_images; i++) {
+      for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
+        if (landmark_id_table_.at(i)[k] > 0) {
+          landmark_id_table_.at(i)[k] = landmark_id_2_id_table.at(landmark_id_table_.at(i)[k]-1);
+        }
+      }
+    }
+
     std::cout << "total landmark counts: " << landmark_count << std::endl;
+    std::cout << "total landmark counts: " << landmark_count_after_threshold << std::endl;
 
     return true;
   }
@@ -217,7 +267,6 @@ class Frontend {
                                    + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).pt.y) + "\n";
           output_file << output_str;
-                    
         }
       }
     }
@@ -232,15 +281,14 @@ class Frontend {
   std::string time_window_end_;
   size_t downsample_rate_;
 
-  std::vector<std::string> image_names_;
-  std::vector<TimedImageData> image_data_;       
+  std::vector<std::string>                           image_names_;
+  std::vector<TimedImageData>                        image_data_;       
 
-  std::vector<std::vector<cv::KeyPoint>> image_keypoints_;
-  std::vector<cv::Mat> image_descriptions_;           
+  std::vector<std::vector<cv::KeyPoint>>             image_keypoints_;
+  std::vector<cv::Mat>                               image_descriptions_;           
+  std::vector<std::vector<std::vector<cv::DMatch>>>  image_keypoint_matches_;
 
-  std::vector<std::vector<std::vector<cv::DMatch>>> image_keypoint_matches_;
-
-  std::vector<std::vector<size_t>> landmark_id_table_;
+  std::vector<std::vector<size_t>>                   landmark_id_table_;       // give the landmark id of each feature in each image
 };
 
 int main(int argc, char **argv) {
