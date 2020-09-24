@@ -168,14 +168,11 @@ class Frontend {
 
 
     // assign landmark id to each matched features
-    size_t lll = 0;
     size_t landmark_count = 0;
     landmark_id_table_.resize(num_of_images);
     for (size_t i=0; i<num_of_images; i++) {
       landmark_id_table_.at(i) = std::vector<size_t> (image_keypoints_.at(i).size(), 0);    
     }
-
-    std::map<size_t, size_t> reduced_map;
 
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t j=i+1; j<num_of_images; j++) {
@@ -196,18 +193,17 @@ class Frontend {
           else if (landmark_id_table_.at(i)[query_idx] == 0  && landmark_id_table_.at(j)[train_idx] > 0) {
             landmark_id_table_.at(i)[query_idx] = landmark_id_table_.at(j)[train_idx];
           }
+          // TODO(tsangkai): use graph to solve this problem
           else if (landmark_id_table_.at(i)[query_idx] != landmark_id_table_.at(j)[train_idx]) {
-            std::cout << "image " << i << ": " << landmark_id_table_.at(i)[query_idx] << std::endl;
-            std::cout << "image " << j << ": " << landmark_id_table_.at(j)[train_idx] << std::endl;
-            std::cout << ++lll << std::endl;
 
             size_t _min = std::min(landmark_id_table_.at(i)[query_idx], landmark_id_table_.at(j)[train_idx]);
-            size_t _max = std::max(landmark_id_table_.at(i)[query_idx], landmark_id_table_.at(j)[train_idx]);
-
+            landmark_id_table_.at(i)[query_idx] = _min;
+            landmark_id_table_.at(j)[train_idx] = _min;
           }
         }
       }
     }
+
 
     // count the number of observations for each landmark/feature
     std::vector<size_t> landmark_obs_count(landmark_count, 0);
