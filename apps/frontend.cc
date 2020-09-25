@@ -88,13 +88,15 @@ class FeatureNode {
 class Frontend {
 
  public:
-  Frontend(std::string config_file_path) {
+  Frontend(std::string config_folder_path) {
   
+    std::string config_file_path = config_folder_path + "test.yaml";
     cv::FileStorage config_file(config_file_path, cv::FileStorage::READ);
 
     time_window_begin_ = std::string(config_file["time_window"][0]);
     time_window_end_ = std::string(config_file["time_window"][1]);
     downsample_rate_ = (size_t)(int)(config_file["frontend"]["downsample_rate"]);
+    landmark_obs_count_threshold_ = (int)(config_file["frontend"]["landmark_obs_count_threshold"]);
 
     std::cout << "Consider from " << time_window_begin_ << " to " << time_window_end_ << ": " << std::endl;
   }
@@ -245,12 +247,11 @@ class Frontend {
     }
 
     // keep only those landmarks observed often
-    size_t observation_count_threshold = 5;
     size_t landmark_count_after_threshold = 0;
     std::vector<size_t> landmark_id_2_id_table(landmark_count, 0);
 
     for (size_t i=0; i<landmark_count; i++) {
-      if (landmark_obs_count.at(i) > observation_count_threshold) {
+      if (landmark_obs_count.at(i) > landmark_obs_count_threshold_) {
         landmark_count_after_threshold++;
         landmark_id_2_id_table.at(i) = landmark_count_after_threshold;
       }
@@ -305,6 +306,7 @@ class Frontend {
   std::string time_window_begin_;
   std::string time_window_end_;
   size_t downsample_rate_;
+  int landmark_obs_count_threshold_;
 
   std::vector<std::string>                  image_names_;
   std::vector<TimedImageData>               image_data_;       
@@ -319,8 +321,8 @@ int main(int argc, char **argv) {
 
   /*** Step 0. Read configuration file ***/
 
-  std::string config_file_path("../config/test.yaml");
-  Frontend frontend(config_file_path);                     // read configuration file
+  std::string config_folder_path("../config/");
+  Frontend frontend(config_folder_path);                     // read configuration file
 
 
   /*** Step 1. Read image files ***/

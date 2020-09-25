@@ -117,12 +117,18 @@ class ExpLandmarkOptSLAM {
 
  public:
 
+  ExpLandmarkOptSLAM(std::string config_folder_path) {
+    ReadConfigurationFiles(config_folder_path);
+  }
+
   bool ReadConfigurationFiles(std::string config_folder_path) {
 
     // test configuration file
     cv::FileStorage test_config_file(config_folder_path + "test.yaml", cv::FileStorage::READ);
     time_begin_ = ConverStrTime(test_config_file["time_window"][0]);  
     time_end_ = ConverStrTime(test_config_file["time_window"][1]);  
+
+    tri_max_num_iterations_ = (int)(test_config_file["backend"]["tri_max_num_iterations"]);
 
     // experiment configuration file
     cv::FileStorage experiment_config_file(config_folder_path + "config_fpga_p2_euroc.yaml", cv::FileStorage::READ);
@@ -434,7 +440,7 @@ class ExpLandmarkOptSLAM {
     optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
     optimization_options_.minimizer_progress_to_stdout = true;
     optimization_options_.num_threads = 6;
-    optimization_options_.max_num_iterations = 16;  // 20
+    optimization_options_.max_num_iterations = tri_max_num_iterations_;
     optimization_options_.function_tolerance = 1e-9;
 
     for (size_t i=1; i<position_parameter_.size(); ++i) {
@@ -500,6 +506,7 @@ class ExpLandmarkOptSLAM {
  private:
   double time_begin_;
   double time_end_;
+  int tri_max_num_iterations_;
 
   // camera intrinsic parameters
   Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
@@ -526,10 +533,8 @@ int main(int argc, char **argv) {
 
   google::InitGoogleLogging(argv[0]);
 
-  ExpLandmarkOptSLAM slam_problem;
-
-  std::string config_folder_path = "../config/";
-  slam_problem.ReadConfigurationFiles(config_folder_path);
+  std::string config_folder_path("../config/");
+  ExpLandmarkOptSLAM slam_problem(config_folder_path);
 
   std::string euroc_dataset_path = "../../../dataset/mav0/";
   std::string ground_truth_file_path = euroc_dataset_path + "state_groundtruth_estimate0/data.csv";
