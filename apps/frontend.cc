@@ -219,7 +219,7 @@ class Frontend {
 
 
     // keep only those landmarks observed often
-    size_t observation_count_threshold = 3;
+    size_t observation_count_threshold = 5;
     size_t landmark_count_after_threshold = 0;
     std::vector<size_t> landmark_id_2_id_table(landmark_count, 0);
 

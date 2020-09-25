@@ -434,7 +434,7 @@ class ExpLandmarkOptSLAM {
     optimization_options_.linear_solver_type = ceres::DENSE_SCHUR;
     optimization_options_.minimizer_progress_to_stdout = true;
     optimization_options_.num_threads = 6;
-    optimization_options_.max_num_iterations = 15;  // 20
+    optimization_options_.max_num_iterations = 20;  // 20
     optimization_options_.function_tolerance = 1e-9;
 
     for (size_t i=1; i<position_parameter_.size(); ++i) {
