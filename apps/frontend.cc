@@ -33,17 +33,70 @@ class TimedImageData {
   cv::Mat image_;
 };
 
+class FeatureNode {
+ public: 
+  FeatureNode() {
+    landmark_id_ = 0;
+  }
+
+  bool AddNeighbor(FeatureNode* feature_node_ptr) {
+    neighbors_.push_back(feature_node_ptr);
+    return true;
+  }
+
+  bool IsNeighborEmpty() {
+    return neighbors_.empty();
+  }
+
+  size_t GetLandmarkId() {
+    return landmark_id_;
+  }
+
+  void SetLandmarkId(size_t new_landmark_id) {
+    landmark_id_ = new_landmark_id;
+  }  
+
+  bool AssignLandmarkId(size_t input_landmark_id) {
+    if (input_landmark_id == 0) {
+      std::cout << "invalid landmark id." << std::endl;
+      return false;
+    }
+    else if (input_landmark_id == landmark_id_) {
+      return true;
+    }    
+    else if (input_landmark_id != landmark_id_ && landmark_id_ == 0) {
+      landmark_id_ = input_landmark_id;
+      
+      for (auto neighbor_ptr: neighbors_) {
+        neighbor_ptr->AssignLandmarkId(input_landmark_id);
+      }
+
+      return true;
+    }
+    else {   // input_landmark_id != landmark_id_ && landmark_id_ != 0
+      std::cout << "I don't know what happen!" << std::endl;
+      return false;
+    }
+
+  }
+
+ private:
+  size_t landmark_id_;
+  std::vector<FeatureNode *> neighbors_;   
+};
 
 class Frontend {
 
  public:
-  Frontend(std::string config_file_path) {
+  Frontend(std::string config_folder_path) {
   
+    std::string config_file_path = config_folder_path + "test.yaml";
     cv::FileStorage config_file(config_file_path, cv::FileStorage::READ);
 
     time_window_begin_ = std::string(config_file["time_window"][0]);
     time_window_end_ = std::string(config_file["time_window"][1]);
     downsample_rate_ = (size_t)(int)(config_file["frontend"]["downsample_rate"]);
+    landmark_obs_count_threshold_ = (int)(config_file["frontend"]["landmark_obs_count_threshold"]);
 
     std::cout << "Consider from " << time_window_begin_ << " to " << time_window_end_ << ": " << std::endl;
   }
@@ -87,18 +140,6 @@ class Frontend {
 
     std::cout << "number of processed images: " << selected_counter << std::endl;
 
-    // for visual debugging
-    // loop closure observed
-    /***
-    for (size_t i=0; i<image_data_.size(); ++i) {
-      if (i % 5 == 0) {
-        cv::imshow(std::to_string(i) + " " + image_data_.at(i).GetTimestamp(), image_data_.at(i).GetImage());
-      }
-    }
-
-    cv::waitKey();
-    ***/
-
     return true;
   }
 
@@ -134,23 +175,35 @@ class Frontend {
 
     size_t num_of_images = image_data_.size();
 
-    image_keypoint_matches_.resize(num_of_images);
+    landmark_id_table_.resize(num_of_images);
     for (size_t i=0; i<num_of_images; i++) {
-      image_keypoint_matches_.at(i) = std::vector<std::vector<cv::DMatch>>(num_of_images);
+      for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
+        landmark_id_table_.at(i).push_back(new FeatureNode());
+      }
     }
+
 
     // call opencv matcher
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t j=i+1; j<num_of_images; j++) {
 
         std::vector<cv::DMatch> image_keypoint_temp_matches;
+        std::vector<cv::DMatch> image_keypoint_matches;
   
         matcher->match(image_descriptions_.at(i), image_descriptions_.at(j), image_keypoint_temp_matches);
 
         // keep the matches that have smaller distance
         for (size_t k=0; k<image_keypoint_temp_matches.size(); k++) {
           if (image_keypoint_temp_matches[k].distance < 40) {   // 60
-            image_keypoint_matches_.at(i).at(j).push_back(image_keypoint_temp_matches[k]);
+
+            image_keypoint_matches.push_back(image_keypoint_temp_matches[k]);
+
+            // add edge to the graph
+            size_t query_idx = image_keypoint_temp_matches[k].queryIdx;
+            size_t train_idx = image_keypoint_temp_matches[k].trainIdx;
+
+            landmark_id_table_.at(i).at(query_idx)->AddNeighbor(landmark_id_table_.at(j).at(train_idx));
+            landmark_id_table_.at(j).at(train_idx)->AddNeighbor(landmark_id_table_.at(i).at(query_idx));
           }
         }  
 
@@ -158,7 +211,7 @@ class Frontend {
         cv::Mat img_w_matches;
         cv::drawMatches(image_data_.at(i).GetImage(), image_keypoints_.at(i),
                       image_data_.at(j).GetImage(), image_keypoints_.at(j),
-                      image_keypoint_matches_.at(i).at(j), img_w_matches);
+                      image_keypoint_matches, img_w_matches);
 
         cv::imshow("Matches between " + std::to_string(i) + " and " + std::to_string(j), img_w_matches);
         cv::waitKey();
@@ -169,37 +222,12 @@ class Frontend {
 
     // assign landmark id to each matched features
     size_t landmark_count = 0;
-    landmark_id_table_.resize(num_of_images);
-    for (size_t i=0; i<num_of_images; i++) {
-      landmark_id_table_.at(i) = std::vector<size_t> (image_keypoints_.at(i).size(), 0);    
-    }
 
     for (size_t i=0; i<num_of_images; i++) {
-      for (size_t j=i+1; j<num_of_images; j++) {
-        for (size_t k=0; k<image_keypoint_matches_.at(i).at(j).size(); k++) {
-          
-          size_t query_idx = image_keypoint_matches_.at(i).at(j)[k].queryIdx;
-          size_t train_idx = image_keypoint_matches_.at(i).at(j)[k].trainIdx;
-
-          
-          if (landmark_id_table_.at(i)[query_idx] == 0 && landmark_id_table_.at(j)[train_idx] == 0) {
-            landmark_count++;
-            landmark_id_table_.at(i)[query_idx] = landmark_count;
-            landmark_id_table_.at(j)[train_idx] = landmark_count;
-          }
-          else if (landmark_id_table_.at(i)[query_idx] > 0  && landmark_id_table_.at(j)[train_idx] == 0) {
-            landmark_id_table_.at(j)[train_idx] = landmark_id_table_.at(i)[query_idx];
-          }
-          else if (landmark_id_table_.at(i)[query_idx] == 0  && landmark_id_table_.at(j)[train_idx] > 0) {
-            landmark_id_table_.at(i)[query_idx] = landmark_id_table_.at(j)[train_idx];
-          }
-          // TODO(tsangkai): use graph to solve this problem
-          else if (landmark_id_table_.at(i)[query_idx] != landmark_id_table_.at(j)[train_idx]) {
-
-            size_t _min = std::min(landmark_id_table_.at(i)[query_idx], landmark_id_table_.at(j)[train_idx]);
-            landmark_id_table_.at(i)[query_idx] = _min;
-            landmark_id_table_.at(j)[train_idx] = _min;
-          }
+      for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
+        if (!landmark_id_table_.at(i).at(k)->IsNeighborEmpty() && landmark_id_table_.at(i).at(k)->GetLandmarkId()==0) {
+          landmark_count++;
+          landmark_id_table_.at(i).at(k)->AssignLandmarkId(landmark_count);
         }
       }
     }
@@ -210,21 +238,20 @@ class Frontend {
 
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
-        if (landmark_id_table_.at(i)[k] > 0)
-
-
-          landmark_obs_count.at(landmark_id_table_.at(i)[k]-1)++;
+        
+        size_t temp_landmark_id = landmark_id_table_.at(i).at(k)->GetLandmarkId();
+        if (temp_landmark_id > 0) {
+          landmark_obs_count.at(temp_landmark_id-1)++;
+        }
       }
     }
 
-
     // keep only those landmarks observed often
-    size_t observation_count_threshold = 5;
     size_t landmark_count_after_threshold = 0;
     std::vector<size_t> landmark_id_2_id_table(landmark_count, 0);
 
     for (size_t i=0; i<landmark_count; i++) {
-      if (landmark_obs_count.at(i) > observation_count_threshold) {
+      if (landmark_obs_count.at(i) > landmark_obs_count_threshold_) {
         landmark_count_after_threshold++;
         landmark_id_2_id_table.at(i) = landmark_count_after_threshold;
       }
@@ -232,8 +259,10 @@ class Frontend {
 
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
-        if (landmark_id_table_.at(i)[k] > 0) {
-          landmark_id_table_.at(i)[k] = landmark_id_2_id_table.at(landmark_id_table_.at(i)[k]-1);
+
+        size_t temp_landmark_id = landmark_id_table_.at(i).at(k)->GetLandmarkId();
+        if (temp_landmark_id > 0) {
+          landmark_id_table_.at(i).at(k)->SetLandmarkId(landmark_id_2_id_table.at(temp_landmark_id-1));
         }
       }
     }
@@ -256,10 +285,11 @@ class Frontend {
 
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t k=0; k<image_keypoints_.at(i).size(); ++k) {
-        if (landmark_id_table_.at(i)[k]!=0) {
+
+        if (landmark_id_table_.at(i).at(k)->GetLandmarkId()!=0) {
           
           std::string output_str = image_data_.at(i).GetTimestamp() + "," 
-                                   + std::to_string(landmark_id_table_.at(i)[k]) + ","
+                                   + std::to_string(landmark_id_table_.at(i).at(k)->GetLandmarkId()) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).pt.y) + "\n";
           output_file << output_str;
@@ -276,23 +306,23 @@ class Frontend {
   std::string time_window_begin_;
   std::string time_window_end_;
   size_t downsample_rate_;
+  int landmark_obs_count_threshold_;
 
-  std::vector<std::string>                           image_names_;
-  std::vector<TimedImageData>                        image_data_;       
+  std::vector<std::string>                  image_names_;
+  std::vector<TimedImageData>               image_data_;       
 
-  std::vector<std::vector<cv::KeyPoint>>             image_keypoints_;
-  std::vector<cv::Mat>                               image_descriptions_;           
-  std::vector<std::vector<std::vector<cv::DMatch>>>  image_keypoint_matches_;
+  std::vector<std::vector<cv::KeyPoint>>    image_keypoints_;
+  std::vector<cv::Mat>                      image_descriptions_;           
 
-  std::vector<std::vector<size_t>>                   landmark_id_table_;       // give the landmark id of each feature in each image
+  std::vector<std::vector<FeatureNode*>>    landmark_id_table_;
 };
 
 int main(int argc, char **argv) {
 
   /*** Step 0. Read configuration file ***/
 
-  std::string config_file_path("../config/test.yaml");
-  Frontend frontend(config_file_path);                     // read configuration file
+  std::string config_folder_path("../config/");
+  Frontend frontend(config_folder_path);                     // read configuration file
 
 
   /*** Step 1. Read image files ***/
