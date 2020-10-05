@@ -307,8 +307,8 @@ class ExpLandmarkOptSLAM {
 
         if (imu_data_vec.size()>1) {
           rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond(), imu_data.GetTimestamp()));
-          position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data.GetTimestamp()));
           velocity_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data.GetTimestamp()));
+          position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data.GetTimestamp()));
         }
       }
     }
@@ -331,14 +331,14 @@ class ExpLandmarkOptSLAM {
       Eigen::Quaterniond rotation_t_plus_1 = rotation_parameter_.at(i)->estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 
                                                                                                                         0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 
                                                                                                                         0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
-      Eigen::Vector3d position_t_plus_1 = position_parameter_.at(i)->estimate() + time_diff*velocity_parameter_.at(i)->estimate() + (0.5*time_diff*time_diff)*accel_plus_gravity;
       Eigen::Vector3d velocity_t_plus_1 = velocity_parameter_.at(i)->estimate() + time_diff*accel_plus_gravity;
+      Eigen::Vector3d position_t_plus_1 = position_parameter_.at(i)->estimate() + time_diff*velocity_parameter_.at(i)->estimate() + (0.5*time_diff*time_diff)*accel_plus_gravity;
 
 
 
       rotation_parameter_.at(i+1)->setEstimate(rotation_t_plus_1);
-      position_parameter_.at(i+1)->setEstimate(position_t_plus_1);
       velocity_parameter_.at(i+1)->setEstimate(velocity_t_plus_1);
+      position_parameter_.at(i+1)->setEstimate(position_t_plus_1);
       
       // add constraints
       ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).GetGyroMeasurement(),
@@ -348,11 +348,11 @@ class ExpLandmarkOptSLAM {
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
                                              rotation_parameter_.at(i+1)->parameters(),
-                                             position_parameter_.at(i+1)->parameters(),
                                              velocity_parameter_.at(i+1)->parameters(),
+                                             position_parameter_.at(i+1)->parameters(),
                                              rotation_parameter_.at(i)->parameters(),
-                                             position_parameter_.at(i)->parameters(),
-                                             velocity_parameter_.at(i)->parameters());    
+                                             velocity_parameter_.at(i)->parameters(),
+                                             position_parameter_.at(i)->parameters());    
 
       optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 0, -2.8);
       optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 1,  4.2);
@@ -445,8 +445,8 @@ class ExpLandmarkOptSLAM {
 
     for (size_t i=1; i<position_parameter_.size(); ++i) {
       optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockConstant(position_parameter_.at(i)->parameters());
       optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(i)->parameters());
+      optimization_problem_.SetParameterBlockConstant(position_parameter_.at(i)->parameters());
     }
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
@@ -458,8 +458,8 @@ class ExpLandmarkOptSLAM {
 
     for (size_t i=1; i<position_parameter_.size(); ++i) {
       optimization_problem_.SetParameterBlockVariable(rotation_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockVariable(position_parameter_.at(i)->parameters());
       optimization_problem_.SetParameterBlockVariable(velocity_parameter_.at(i)->parameters());
+      optimization_problem_.SetParameterBlockVariable(position_parameter_.at(i)->parameters());
     }
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
@@ -515,8 +515,8 @@ class ExpLandmarkOptSLAM {
 
   // data storage (parameters to be optimized)
   std::vector<TimedQuatParameterBlock*> rotation_parameter_;
-  std::vector<Timed3dParameterBlock*>   position_parameter_;
   std::vector<Timed3dParameterBlock*>   velocity_parameter_;
+  std::vector<Timed3dParameterBlock*>   position_parameter_;
   std::vector<LandmarkParameterBlock*>  landmark_parameter_;
 
   double accel_bias_parameter_[3];
