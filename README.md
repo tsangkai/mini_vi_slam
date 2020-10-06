@@ -27,3 +27,10 @@ To run `backend`, one needs to sepcify three files: observation file, IMU file, 
 ```
 
 Currently, for developing, I write the paths in the code. Therefore, directly executing those files without argements is fine.
+
+## Result
+
+![estimated trajectory](result/0925_ds_8_lt_4_tri_16_traj.png)
+![estimation error](result/0925_ds_8_lt_4_tri_16.png)
+
+No covariance is specified now, and no preintegration is implemented yet.
