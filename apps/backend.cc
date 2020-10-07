@@ -26,10 +26,9 @@ double ConverStrTime(std::string time_str) {
   return std::stoi(time_str_sec) + std::stoi(time_str_nano_sec)*1e-9;
 }
 
-class IMUData {
+struct IMUData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
- public:
   IMUData(std::string imu_data_str) {
     std::stringstream str_stream(imu_data_str);          // Create a stringstream of the current line
 
@@ -51,6 +50,7 @@ class IMUData {
     }
   }
 
+  /***
   double GetTimestamp() {
     return timestamp_;
   }
@@ -62,13 +62,33 @@ class IMUData {
   Eigen::Vector3d GetAccelMeasurement() {
     return accel_;
   }
+  ***/
 
- private:
   double timestamp_;
   Eigen::Vector3d gyro_;
   Eigen::Vector3d accel_; 
 };
 
+
+struct PreIntIMUData {
+ EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+  PreIntIMUData(double dt, 
+                Eigen::Matrix3d d_rotation, 
+                Eigen::Vector3d d_velocity, 
+                Eigen::Vector3d d_position) {
+    dt_ = dt;
+    d_rotation_ = d_rotation;
+    d_velocity_ = d_velocity;
+    d_position_ = d_position;
+
+  }
+
+  double dt_;
+  Eigen::Matrix3d d_rotation_;  
+  Eigen::Vector3d d_velocity_;
+  Eigen::Vector3d d_position_; 
+};
 
 class ObservationData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -431,7 +451,7 @@ class ExpLandmarkOptSLAM {
     return true;
   }
 
-  bool Preintegrate(std::vector<IMUData> imu_data_vec) {
+  PreIntIMUData Preintegrate(std::vector<IMUData> imu_data_vec) {
     
     Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
     Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
@@ -443,16 +463,16 @@ class ExpLandmarkOptSLAM {
     Eigen::Vector3d Delta_P = Eigen::Vector3d(0, 0, 0);
 
     for (size_t i=0; i<imu_data_vec.size(); i++) {
-      Delta_P = Delta_P + imu_dt_*Delta_V + 0.5*(imu_dt_*imu_dt_)*Delta_R*(imu_data_vec.at(i).GetAccelMeasurement() - accel_bias);
-      Delta_V = Delta_V + imu_dt_ * Delta_R*(imu_data_vec.at(i).GetAccelMeasurement() - accel_bias);
-      Delta_R = Delta_R * Exp(imu_dt_ * (imu_data_vec.at(i).GetGyroMeasurement() - gyro_bias));
+      Delta_P = Delta_P + imu_dt_*Delta_V + 0.5*(imu_dt_*imu_dt_)*Delta_R*(imu_data_vec.at(i).accel_ - accel_bias);
+      Delta_V = Delta_V + imu_dt_ * Delta_R*(imu_data_vec.at(i).accel_ - accel_bias);
+      Delta_R = Delta_R * Exp(imu_dt_ * (imu_data_vec.at(i).gyro_ - gyro_bias));
     }
 
     std::cout << Delta_R << std::endl;
     std::cout << Delta_V << std::endl;
     std::cout << Delta_P << std::endl;
 
-    return true;
+    return PreIntIMUData(imu_data_vec.size()*imu_dt_, Delta_R, Delta_V, Delta_P);
   }
 
   bool ReadIMUData(std::string imu_file_path) {
@@ -478,7 +498,7 @@ class ExpLandmarkOptSLAM {
 
       IMUData imu_data(imu_data_str);
 
-      if (time_begin_ <= imu_data.GetTimestamp() && imu_data.GetTimestamp() <= time_end_) {
+      if (time_begin_ <= imu_data.timestamp_ && imu_data.timestamp_ <= time_end_) {
         // imu_data_vec.push_back(imu_data);
 
         
@@ -487,7 +507,7 @@ class ExpLandmarkOptSLAM {
           imu_data_vec.push_back(imu_data);
 
         }
-        else if (imu_data.GetTimestamp() < state_parameter_.at(state_idx+1)->GetTimestamp()) {
+        else if (imu_data.timestamp_ < state_parameter_.at(state_idx+1)->GetTimestamp()) {
           // imu_data_vec_small.push_back(imu_data_vec.at(i));
           imu_data_vec.push_back(imu_data);
 
@@ -496,7 +516,25 @@ class ExpLandmarkOptSLAM {
           // preintegrate imu_data_vec_small
           std::cout << std::endl;
           std::cout << state_parameter_.at(state_idx)->GetTimestamp() << ": " << imu_data_vec.size() << std::endl;
-          Preintegrate(imu_data_vec);
+
+          PreIntIMUData pre_int_imu_data = Preintegrate(imu_data_vec);
+
+
+          
+
+
+          // dead-reckoning to initialize 
+
+          Eigen::Quaterniond current_rotation = state_parameter_.at(state_idx)->GetRotationBlock()->estimate();
+          Eigen::Vector3d current_velocity = state_parameter_.at(state_idx)->GetVelocityBlock()->estimate();
+          Eigen::Vector3d current_position = state_parameter_.at(state_idx)->GetPositionBlock()->estimate();
+
+          state_idx++;
+
+          state_parameter_.at(state_idx)->GetRotationBlock()->setEstimate(Eigen::Quaterniond(current_rotation*pre_int_imu_data.d_rotation_));
+          // state_parameter_.at(state_idx)->GetVelocityBlock()->setEstimate();
+          // state_parameter_.at(state_idx)->GetPositionBlock()->setEstimate();
+
 
           // empty imu_data_vec_small
           imu_data_vec.clear();
@@ -504,7 +542,6 @@ class ExpLandmarkOptSLAM {
           // add current imu data in
           imu_data_vec.push_back(imu_data);
 
-          state_idx++;
         }
       }
     }
