@@ -1,4 +1,5 @@
 
+#include <cassert>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -236,9 +237,8 @@ class ExpLandmarkOptSLAM {
     std::cout << "Read ground truth data at " << ground_truth_file_path << std::endl;
 
     std::ifstream input_file(ground_truth_file_path);
-    
-    if(!input_file.is_open()) 
-      throw std::runtime_error("Could not open file");
+
+    assert(("Could not open ground truth file.", input_file.is_open()));
 
     // Read the column names
     // Extract the first line in the file
@@ -308,66 +308,11 @@ class ExpLandmarkOptSLAM {
     return false;
   }  
 
-  bool ProcessGroundTruth(std::string ground_truth_file_path) {
 
-    std::cout << "Read ground truth data at " << ground_truth_file_path << std::endl;
-
-    std::ifstream input_file(ground_truth_file_path);
-    if(!input_file.is_open()) 
-      throw std::runtime_error("Could not open file");
-
-    // Read the column names
-    // Extract the first line in the file
-    std::string line;
-    std::getline(input_file, line);
-
-    std::ofstream output_file("ground_truth.csv");
-    output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z,b_w_x,b_w_y,b_w_z,b_a_x,b_a_y,b_a_z\n";
-
-    while (std::getline(input_file, line)) {
-      std::stringstream s_stream(line);                // Create a stringstream of the current line
-
-      if (s_stream.good()) {
-        std::string time_stamp_str;
-        std::getline(s_stream, time_stamp_str, ',');   // get first string delimited by comma
-      
-        if (time_begin_ <= ConverStrTime(time_stamp_str) && ConverStrTime(time_stamp_str) <= time_end_) {
-
-          std::string data;
-          output_file << std::to_string(ConverStrTime(time_stamp_str));
-          for (int i=0; i<7; ++i) {                    
-            std::getline(s_stream, data, ',');
-
-            output_file << ",";
-            output_file << data;
-          }
-
-          // ignore velocity part
-          for (int i=0; i<3; ++i) {                    
-            std::getline(s_stream, data, ',');
-          }
-
-          for (int i=0; i<6; ++i) {                    
-            std::getline(s_stream, data, ',');
-
-            output_file << ",";
-            output_file << data;
-          }
-
-          output_file << std::endl;
-        }
-      }
-    }
-
-    input_file.close();
-    output_file.close();
-
-    return true;
-  }  
 
   bool ReadObservationData(std::string observation_file_path) {
   
-    // assert: state_parameter_ is not empty
+    assert(("state_parameter_ should have been initialized.", !state_parameter_.empty()));
 
     std::cout << "Read observation data at " << observation_file_path << std::endl;
 
@@ -443,6 +388,76 @@ class ExpLandmarkOptSLAM {
     return true;
   }
 
+  bool ProcessGroundTruth(std::string ground_truth_file_path) {
+
+    std::cout << "Read ground truth data at " << ground_truth_file_path << std::endl;
+
+    std::ifstream input_file(ground_truth_file_path);
+    
+    assert(("Could not open ground truth file.", input_file.is_open()));
+
+    // Read the column names
+    // Extract the first line in the file
+    std::string line;
+    std::getline(input_file, line);
+
+    std::ofstream output_file("ground_truth.csv");
+    output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z,b_w_x,b_w_y,b_w_z,b_a_x,b_a_y,b_a_z\n";
+
+    size_t state_idx = 0;
+
+
+    while (std::getline(input_file, line)) {
+      std::stringstream s_stream(line);                // Create a stringstream of the current line
+
+      if (s_stream.good()) {
+        std::string time_stamp_str;
+        std::getline(s_stream, time_stamp_str, ',');   // get first string delimited by comma
+      
+        double ground_truth_timestamp = ConverStrTime(time_stamp_str);
+        if (time_begin_ <= ground_truth_timestamp && ground_truth_timestamp <= time_end_) {
+
+          if ((state_idx + 1) == state_parameter_.size()) {
+          }
+          else if (ground_truth_timestamp < state_parameter_.at(state_idx+1)->GetTimestamp()) {
+          }
+          else {
+            // output 
+            std::string data;
+            output_file << std::to_string(ground_truth_timestamp);
+            for (int i=0; i<7; ++i) {                    
+              std::getline(s_stream, data, ',');
+
+              output_file << ",";
+              output_file << data;
+            }
+
+            // ignore velocity part
+            for (int i=0; i<3; ++i) {                    
+              std::getline(s_stream, data, ',');
+            }
+
+            for (int i=0; i<6; ++i) {                    
+              std::getline(s_stream, data, ',');
+
+              output_file << ",";
+              output_file << data;
+            }
+
+            output_file << std::endl;
+
+            state_idx++;
+          }
+        }
+      }
+    }
+
+    input_file.close();
+    output_file.close();
+
+    return true;
+  }    
+
   PreIntIMUData Preintegrate(std::vector<IMUData> imu_data_vec) {
     
     Eigen::Matrix3d Delta_R = Eigen::Matrix3d::Identity();
@@ -468,8 +483,7 @@ class ExpLandmarkOptSLAM {
 
     std::ifstream input_file(imu_file_path);
     
-    if(!input_file.is_open()) 
-      throw std::runtime_error("Could not open file");
+    assert(("Could not open IMU file.", input_file.is_open()));
 
     // Read the column names
     // Extract the first line in the file
@@ -505,10 +519,6 @@ class ExpLandmarkOptSLAM {
           std::cout << state_parameter_.at(state_idx)->GetTimestamp() << ": " << imu_data_vec.size() << std::endl;
 
           PreIntIMUData pre_int_imu_data = Preintegrate(imu_data_vec);
-
-
-          
-
 
           // dead-reckoning to initialize 
 
@@ -639,7 +649,7 @@ class ExpLandmarkOptSLAM {
 
     output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z\n";
 
-    for (size_t i=0; i<state_parameter_.size(); ++i) {
+    for (size_t i=1; i<state_parameter_.size(); ++i) {
       output_file << std::to_string(state_parameter_.at(i)->GetTimestamp()) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(0)) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(1)) << ",";
@@ -706,10 +716,11 @@ int main(int argc, char **argv) {
   std::string euroc_dataset_path = "../../../dataset/mav0/";
   std::string ground_truth_file_path = euroc_dataset_path + "state_groundtruth_estimate0/data.csv";
   slam_problem.ReadInitialCondition(ground_truth_file_path);
-  slam_problem.ProcessGroundTruth(ground_truth_file_path);
 
   std::string observation_file_path = "feature_observation.csv";
   slam_problem.ReadObservationData(observation_file_path);
+
+  slam_problem.ProcessGroundTruth(ground_truth_file_path);
 
   std::string imu_file_path = euroc_dataset_path + "imu0/data.csv";
   slam_problem.ReadIMUData(imu_file_path);
