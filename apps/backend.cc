@@ -17,6 +17,12 @@
 #include "imu_error.h"
 #include "reprojection_error.h"
 
+// TODO: initialized from config files
+Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
+Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
+Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
+
+
 
                                                          // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
@@ -49,20 +55,6 @@ struct IMUData {
       }
     }
   }
-
-  /***
-  double GetTimestamp() {
-    return timestamp_;
-  }
-
-  Eigen::Vector3d GetGyroMeasurement() {
-    return gyro_;
-  }
-
-  Eigen::Vector3d GetAccelMeasurement() {
-    return accel_;
-  }
-  ***/
 
   double timestamp_;
   Eigen::Vector3d gyro_;
@@ -453,11 +445,6 @@ class ExpLandmarkOptSLAM {
 
   PreIntIMUData Preintegrate(std::vector<IMUData> imu_data_vec) {
     
-    Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
-    Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
-    Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
-
-    // rotation
     Eigen::Matrix3d Delta_R = Eigen::Matrix3d::Identity();
     Eigen::Vector3d Delta_V = Eigen::Vector3d(0, 0, 0);
     Eigen::Vector3d Delta_P = Eigen::Vector3d(0, 0, 0);
@@ -530,10 +517,11 @@ class ExpLandmarkOptSLAM {
           Eigen::Vector3d current_position = state_parameter_.at(state_idx)->GetPositionBlock()->estimate();
 
           state_idx++;
-
+          
+          double dT = pre_int_imu_data.dt_;
           state_parameter_.at(state_idx)->GetRotationBlock()->setEstimate(Eigen::Quaterniond(current_rotation*pre_int_imu_data.d_rotation_));
-          // state_parameter_.at(state_idx)->GetVelocityBlock()->setEstimate();
-          // state_parameter_.at(state_idx)->GetPositionBlock()->setEstimate();
+          state_parameter_.at(state_idx)->GetVelocityBlock()->setEstimate(current_velocity + dT*gravity + current_rotation.normalized().toRotationMatrix()*pre_int_imu_data.d_velocity_);
+          state_parameter_.at(state_idx)->GetPositionBlock()->setEstimate(current_position + dT*current_velocity + 0.5*(dT*dT)*gravity + current_rotation.normalized().toRotationMatrix()*pre_int_imu_data.d_position_);
 
 
           // empty imu_data_vec_small
@@ -645,22 +633,21 @@ class ExpLandmarkOptSLAM {
   }
   ***/
 
-  /***
   bool OutputOptimizationResult() {
 
     std::ofstream output_file("trajectory.csv");
 
     output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z\n";
 
-    for (size_t i=0; i<rotation_parameter_.size(); ++i) {
-      output_file << std::to_string(rotation_parameter_.at(i)->timestamp()) << ",";
-      output_file << std::to_string(position_parameter_.at(i)->estimate()(0)) << ",";
-      output_file << std::to_string(position_parameter_.at(i)->estimate()(1)) << ",";
-      output_file << std::to_string(position_parameter_.at(i)->estimate()(2)) << ",";
-      output_file << std::to_string(rotation_parameter_.at(i)->estimate().w()) << ",";
-      output_file << std::to_string(rotation_parameter_.at(i)->estimate().x()) << ",";
-      output_file << std::to_string(rotation_parameter_.at(i)->estimate().y()) << ",";
-      output_file << std::to_string(rotation_parameter_.at(i)->estimate().z()) << std::endl;
+    for (size_t i=0; i<state_parameter_.size(); ++i) {
+      output_file << std::to_string(state_parameter_.at(i)->GetTimestamp()) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(0)) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(1)) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(2)) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetRotationBlock()->estimate().w()) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetRotationBlock()->estimate().x()) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetRotationBlock()->estimate().y()) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetRotationBlock()->estimate().z()) << std::endl;
     }
 
     output_file.close();
@@ -680,7 +667,6 @@ class ExpLandmarkOptSLAM {
 
     return true;
   }
-  ***/
 
  private:
   // testing parameters
@@ -729,7 +715,7 @@ int main(int argc, char **argv) {
   slam_problem.ReadIMUData(imu_file_path);
 
   // slam_problem.SolveOptimizationProblem();
-  // slam_problem.OutputOptimizationResult();
+  slam_problem.OutputOptimizationResult();
 
   return 0;
 }
