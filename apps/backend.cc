@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cmath>
 
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
@@ -158,6 +159,22 @@ class State {
 };
 
 
+Eigen::Matrix3d Hat(Eigen::Vector3d vec) {
+  Eigen::Matrix3d hatted_matrix;
+  hatted_matrix <<      0 , -vec(2),  vec(1),
+                    vec(2),      0 , -vec(0),
+                   -vec(1),  vec(0),      0;
+
+  return hatted_matrix;
+}
+
+Eigen::Matrix3d Exp(Eigen::Vector3d omega) {
+  Eigen::Matrix3d hatted_omega = Hat(omega);
+  double bar_omega = acos(0.5*(hatted_omega.trace()-1));
+
+  return Eigen::Matrix3d::Identity() + (sin(bar_omega)/bar_omega) * hatted_omega + ((1-cos(bar_omega))/(bar_omega*bar_omega)) * hatted_omega*hatted_omega;
+}
+
 
 class ExpLandmarkOptSLAM {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -179,6 +196,8 @@ class ExpLandmarkOptSLAM {
 
     // experiment configuration file
     cv::FileStorage experiment_config_file(config_folder_path + "config_fpga_p2_euroc.yaml", cv::FileStorage::READ);
+
+    imu_dt_ = 1.0 / (double) experiment_config_file["imu_params"]["imu_rate"]; 
 
     cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];            // from camera frame to body frame
 
@@ -412,6 +431,30 @@ class ExpLandmarkOptSLAM {
     return true;
   }
 
+  bool Preintegrate(std::vector<IMUData> imu_data_vec) {
+    
+    Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
+    Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
+    Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
+
+    // rotation
+    Eigen::Matrix3d Delta_R = Eigen::Matrix3d::Identity();
+    Eigen::Vector3d Delta_V = Eigen::Vector3d(0, 0, 0);
+    Eigen::Vector3d Delta_P = Eigen::Vector3d(0, 0, 0);
+
+    for (size_t i=0; i<imu_data_vec.size(); i++) {
+      Delta_P = Delta_P + imu_dt_*Delta_V + 0.5*(imu_dt_*imu_dt_)*Delta_R*(imu_data_vec.at(i).GetAccelMeasurement() - accel_bias);
+      Delta_V = Delta_V + imu_dt_ * Delta_R*(imu_data_vec.at(i).GetAccelMeasurement() - accel_bias);
+      Delta_R = Delta_R * Exp(imu_dt_ * (imu_data_vec.at(i).GetGyroMeasurement() - gyro_bias));
+    }
+
+    std::cout << Delta_R << std::endl;
+    std::cout << Delta_V << std::endl;
+    std::cout << Delta_P << std::endl;
+
+    return true;
+  }
+
   bool ReadIMUData(std::string imu_file_path) {
   
     std::cout << "Read IMU data at " << imu_file_path << std::endl;
@@ -451,18 +494,17 @@ class ExpLandmarkOptSLAM {
         }
         else {
           // preintegrate imu_data_vec_small
-          
+          std::cout << std::endl;
           std::cout << state_parameter_.at(state_idx)->GetTimestamp() << ": " << imu_data_vec.size() << std::endl;
+          Preintegrate(imu_data_vec);
 
           // empty imu_data_vec_small
           imu_data_vec.clear();
-
 
           // add current imu data in
           imu_data_vec.push_back(imu_data);
 
           state_idx++;
-
         }
       }
     }
@@ -604,20 +646,19 @@ class ExpLandmarkOptSLAM {
   ***/
 
  private:
+  // testing parameters
   double time_begin_;
   double time_end_;
   int tri_max_num_iterations_;
 
-  // camera intrinsic parameters
+  // experiment parameters
+  double imu_dt_;
+
   Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
   double focal_length_;
   double principal_point_[2];
 
-  // data storage (parameters to be optimized)
-  // std::vector<TimedQuatParameterBlock*> rotation_parameter_;
-  // std::vector<Timed3dParameterBlock*>   velocity_parameter_;
-  // std::vector<Timed3dParameterBlock*>   position_parameter_;
-
+  // parameter containers
   std::vector<State*>                   state_parameter_;
   std::vector<LandmarkParameterBlock*>  landmark_parameter_;
 
