@@ -428,6 +428,7 @@ class ExpLandmarkOptSLAM {
 
     // storage of IMU data
     std::vector<IMUData> imu_data_vec;
+    size_t state_idx = 0;
 
     std::string imu_data_str;
     while (std::getline(input_file, imu_data_str)) {
@@ -435,40 +436,38 @@ class ExpLandmarkOptSLAM {
       IMUData imu_data(imu_data_str);
 
       if (time_begin_ <= imu_data.GetTimestamp() && imu_data.GetTimestamp() <= time_end_) {
-        imu_data_vec.push_back(imu_data);
+        // imu_data_vec.push_back(imu_data);
+
+        
+        if ((state_idx + 1) == state_parameter_.size()) {
+          // imu_data_vec_small.push_back(imu_data_vec.at(i));
+          imu_data_vec.push_back(imu_data);
+
+        }
+        else if (imu_data.GetTimestamp() < state_parameter_.at(state_idx+1)->GetTimestamp()) {
+          // imu_data_vec_small.push_back(imu_data_vec.at(i));
+          imu_data_vec.push_back(imu_data);
+
+        }
+        else {
+          // preintegrate imu_data_vec_small
+          
+          std::cout << state_parameter_.at(state_idx)->GetTimestamp() << ": " << imu_data_vec.size() << std::endl;
+
+          // empty imu_data_vec_small
+          imu_data_vec.clear();
+
+
+          // add current imu data in
+          imu_data_vec.push_back(imu_data);
+
+          state_idx++;
+
+        }
       }
     }
 
 
-    size_t state_idx = 0;
-    for (size_t i=0; i<imu_data_vec.size(); ++i) {
-
-      std::vector<IMUData> imu_data_vec_small;
-
-
-      if ((state_idx + 1) == state_parameter_.size()) {
-        // imu_data_vec_small.push_back(imu_data_vec.at(i));
-      }
-      else if (imu_data_vec.at(i).GetTimestamp() < state_parameter_.at(state_idx+1)->GetTimestamp()) {
-        // imu_data_vec_small.push_back(imu_data_vec.at(i));
-      }
-      else {
-        // preintegrate imu_data_vec_small
-
-        // empty imu_data_vec_small
-        // imu_data_vec_small.resize(0);
-
-        // add current imu data in
-        // imu_data_vec_small.push_back(imu_data_vec.at(i));
-        // imu_data_vec_small.push_back(imu_data_vec.at(i));
-
-        state_idx++;
-
-
-      }
-
-      std::cout << state_parameter_.at(state_idx)->GetTimestamp() << ": " << imu_data_vec.at(i).GetTimestamp() << std::endl;
-    }  
 
 
     // dead-reckoning to initialize 
