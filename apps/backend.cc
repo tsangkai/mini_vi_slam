@@ -111,6 +111,57 @@ class ObservationData {
 };
 
 
+class State {
+
+ public:
+  State(double timestamp) {
+    timestamp_ = timestamp;
+
+    rotation_block_ptr_ = new TimedQuatParameterBlock();
+    velocity_block_ptr_ =  new Timed3dParameterBlock();
+    position_block_ptr_ =  new Timed3dParameterBlock();
+  }
+
+  void SetRotationBlock(TimedQuatParameterBlock* rotation_block) {
+    rotation_block_ptr_ = rotation_block;
+  }
+
+  void SetVelocityBlock(Timed3dParameterBlock* velocity_block) {
+    velocity_block_ptr_ = velocity_block;
+  }
+
+  void SetPositionBlock(Timed3dParameterBlock* position_block) {
+    position_block_ptr_ = position_block;
+  }
+
+  double GetTimestamp() {
+    return timestamp_;
+  }
+
+  TimedQuatParameterBlock* GetRotationBlock() {
+    return rotation_block_ptr_;
+  }
+
+  Timed3dParameterBlock* GetVelocityBlock() {
+    return velocity_block_ptr_;
+  }
+
+  Timed3dParameterBlock* GetPositionBlock() {
+    return position_block_ptr_;
+  }
+
+ private:
+  double timestamp_;
+  TimedQuatParameterBlock* rotation_block_ptr_;
+  Timed3dParameterBlock*   velocity_block_ptr_;
+  Timed3dParameterBlock*   position_block_ptr_;
+};
+
+
+
+
+
+
 
 class ExpLandmarkOptSLAM {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -175,6 +226,10 @@ class ExpLandmarkOptSLAM {
         std::getline(s_stream, time_stamp_str, ',');   // get first string delimited by comma
       
         if (time_begin_ <= ConverStrTime(time_stamp_str)) {
+
+          // state
+          state_parameter_.push_back(new State(ConverStrTime(time_stamp_str)));
+
           // position
           std::string initial_position_str[3];
           for (int i=0; i<3; ++i) {                    
@@ -182,9 +237,13 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_position(std::stod(initial_position_str[0]), std::stod(initial_position_str[1]), std::stod(initial_position_str[2]));
-          position_parameter_.push_back(new Timed3dParameterBlock(initial_position, ConverStrTime(time_stamp_str)));
-          optimization_problem_.AddParameterBlock(position_parameter_.at(0)->parameters(), 3);
-          optimization_problem_.SetParameterBlockConstant(position_parameter_.at(0)->parameters());
+          Timed3dParameterBlock* position_parameter = new Timed3dParameterBlock(initial_position, ConverStrTime(time_stamp_str));
+          state_parameter_.at(0)->SetPositionBlock(position_parameter);
+          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetPositionBlock()->parameters(), 3);
+          optimization_problem_.SetParameterBlockConstant(state_parameter_.at(0)->GetPositionBlock()->parameters());
+          // position_parameter_.push_back(new Timed3dParameterBlock(initial_position, ConverStrTime(time_stamp_str)));
+          // optimization_problem_.AddParameterBlock(position_parameter_.at(0)->parameters(), 3);
+          // optimization_problem_.SetParameterBlockConstant(position_parameter_.at(0)->parameters());
 
           // rotation
           std::string initial_rotation_str[4];
@@ -193,9 +252,13 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
-          rotation_parameter_.push_back(new TimedQuatParameterBlock(initial_rotation, ConverStrTime(time_stamp_str)));
-          optimization_problem_.AddParameterBlock(rotation_parameter_.at(0)->parameters(), 4);
-          optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(0)->parameters());
+          TimedQuatParameterBlock* rotation_parameter = new TimedQuatParameterBlock(initial_rotation, ConverStrTime(time_stamp_str));
+          state_parameter_.at(0)->SetRotationBlock(rotation_parameter);
+          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4);
+          optimization_problem_.SetParameterBlockConstant(state_parameter_.at(0)->GetRotationBlock()->parameters());
+          // rotation_parameter_.push_back(new TimedQuatParameterBlock(initial_rotation, ConverStrTime(time_stamp_str)));
+          // optimization_problem_.AddParameterBlock(rotation_parameter_.at(0)->parameters(), 4);
+          // optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(0)->parameters());
 
           // velocity
           std::string initial_velocity_str[3];
@@ -204,9 +267,13 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_velocity(std::stod(initial_velocity_str[0]), std::stod(initial_velocity_str[1]), std::stod(initial_velocity_str[2]));
-          velocity_parameter_.push_back(new Timed3dParameterBlock(initial_velocity, ConverStrTime(time_stamp_str)));
-          optimization_problem_.AddParameterBlock(velocity_parameter_.at(0)->parameters(), 3);
-          optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(0)->parameters());
+          Timed3dParameterBlock* velocity_parameter = new Timed3dParameterBlock(initial_velocity, ConverStrTime(time_stamp_str));
+          state_parameter_.at(0)->SetVelocityBlock(velocity_parameter);
+          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetVelocityBlock()->parameters(), 3);
+          optimization_problem_.SetParameterBlockConstant(state_parameter_.at(0)->GetVelocityBlock()->parameters());
+          // velocity_parameter_.push_back(new Timed3dParameterBlock(initial_velocity, ConverStrTime(time_stamp_str)));
+          // optimization_problem_.AddParameterBlock(velocity_parameter_.at(0)->parameters(), 3);
+          // optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(0)->parameters());
 
           std::cout << "Finished initialization from the ground truth file." << std::endl;
 
@@ -305,15 +372,18 @@ class ExpLandmarkOptSLAM {
 
         imu_data_vec.push_back(imu_data);
 
+        /***
         if (imu_data_vec.size()>1) {
           rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond(), imu_data.GetTimestamp()));
           velocity_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data.GetTimestamp()));
           position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(), imu_data.GetTimestamp()));
         }
+        ***/
       }
     }
 
     // dead-reckoning to initialize 
+    /***
     for (size_t i=0; i<imu_data_vec.size()-1; ++i) {
         
       double time_diff = position_parameter_.at(i+1)->timestamp() - position_parameter_.at(i)->timestamp();
@@ -362,6 +432,7 @@ class ExpLandmarkOptSLAM {
       optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 1, 8.8);
       optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 2, 2.8);
     }
+    ***/
 
     input_file.close();
     std::cout << "Finished reading IMU data." << std::endl;
@@ -371,37 +442,45 @@ class ExpLandmarkOptSLAM {
 
   bool ReadObservationData(std::string observation_file_path) {
   
+    // assert: state_parameter_ is not empty
+
     std::cout << "Read observation data at " << observation_file_path << std::endl;
 
     std::ifstream input_file(observation_file_path);
-    
+
     if(!input_file.is_open())
       throw std::runtime_error("Could not open file");
 
     std::string first_line_data_str;
     std::getline(input_file, first_line_data_str);
 
+
     std::string observation_data_str;
     while (std::getline(input_file, observation_data_str)) {
       ObservationData observation_data(observation_data_str);
 
+
       // add observation constraints
-      size_t pose_id;
+      // size_t pose_id;
       size_t landmark_id = observation_data.GetId()-1;
 
-      for (size_t i=0; i<position_parameter_.size(); ++i) {
-        if (observation_data.GetTimestamp() <= position_parameter_.at(i)->timestamp()) {
-          pose_id = i;
-          break;
-        }
+
+      if (state_parameter_.back()->GetTimestamp() < observation_data.GetTimestamp()) {
+          state_parameter_.push_back(new State(observation_data.GetTimestamp()));
+      }
+      else if (state_parameter_.back()->GetTimestamp() > observation_data.GetTimestamp()) {
+          std::cout << "error!";
       }
 
       if (landmark_id >= landmark_parameter_.size()) {
         landmark_parameter_.resize(landmark_id+1);
       }
 
+
+
       landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0));
-      // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());
+      // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());      
+
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
                                                                  T_bc_,
@@ -410,9 +489,10 @@ class ExpLandmarkOptSLAM {
 
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
-                                             rotation_parameter_.at(pose_id)->parameters(),
-                                             position_parameter_.at(pose_id)->parameters(),
-                                             landmark_parameter_.at(landmark_id)->parameters()); 
+                                             state_parameter_.back()->GetRotationBlock()->parameters(),
+                                             state_parameter_.back()->GetPositionBlock()->parameters(),
+                                             landmark_parameter_.at(landmark_id)->parameters());       
+      
     }
 
     for (size_t i=0; i<landmark_parameter_.size(); ++i) {
@@ -431,7 +511,7 @@ class ExpLandmarkOptSLAM {
     return true;
   }
 
-
+  /***
   bool SolveOptimizationProblem() {
 
     std::cout << "Begin solving the optimization problem." << std::endl;
@@ -467,7 +547,9 @@ class ExpLandmarkOptSLAM {
 
     return true;
   }
+  ***/
 
+  /***
   bool OutputOptimizationResult() {
 
     std::ofstream output_file("trajectory.csv");
@@ -502,6 +584,7 @@ class ExpLandmarkOptSLAM {
 
     return true;
   }
+  ***/
 
  private:
   double time_begin_;
@@ -517,6 +600,8 @@ class ExpLandmarkOptSLAM {
   std::vector<TimedQuatParameterBlock*> rotation_parameter_;
   std::vector<Timed3dParameterBlock*>   velocity_parameter_;
   std::vector<Timed3dParameterBlock*>   position_parameter_;
+
+  std::vector<State*>                   state_parameter_;
   std::vector<LandmarkParameterBlock*>  landmark_parameter_;
 
   double accel_bias_parameter_[3];
@@ -526,6 +611,7 @@ class ExpLandmarkOptSLAM {
   ceres::Problem optimization_problem_;
   ceres::Solver::Options optimization_options_;
   ceres::Solver::Summary optimization_summary_;
+
 };
 
 
@@ -547,9 +633,9 @@ int main(int argc, char **argv) {
   std::string observation_file_path = "feature_observation.csv";
   slam_problem.ReadObservationData(observation_file_path);
 
-  slam_problem.SolveOptimizationProblem();
+  // slam_problem.SolveOptimizationProblem();
 
-  slam_problem.OutputOptimizationResult();
+  // slam_problem.OutputOptimizationResult();
 
   return 0;
 }
