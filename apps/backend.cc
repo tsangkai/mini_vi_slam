@@ -13,8 +13,8 @@
 #include <Eigen/Core>
 
 #include "landmark_parameter_block.h"
-#include "timed_3d_parameter_block.h"
-#include "timed_quat_parameter_block.h"
+#include "vec_3d_parameter_block.h"
+#include "quat_parameter_block.h"
 #include "imu_error.h"
 #include "pre_int_imu_error.h"
 #include "reprojection_error.h"
@@ -134,20 +134,20 @@ class State {
   State(double timestamp) {
     timestamp_ = timestamp;
 
-    rotation_block_ptr_ = new TimedQuatParameterBlock();
-    velocity_block_ptr_ =  new Timed3dParameterBlock();
-    position_block_ptr_ =  new Timed3dParameterBlock();
+    rotation_block_ptr_ = new QuatParameterBlock();
+    velocity_block_ptr_ =  new Vec3dParameterBlock();
+    position_block_ptr_ =  new Vec3dParameterBlock();
   }
 
-  void SetRotationBlock(TimedQuatParameterBlock* rotation_block) {
+  void SetRotationBlock(QuatParameterBlock* rotation_block) {
     rotation_block_ptr_ = rotation_block;
   }
 
-  void SetVelocityBlock(Timed3dParameterBlock* velocity_block) {
+  void SetVelocityBlock(Vec3dParameterBlock* velocity_block) {
     velocity_block_ptr_ = velocity_block;
   }
 
-  void SetPositionBlock(Timed3dParameterBlock* position_block) {
+  void SetPositionBlock(Vec3dParameterBlock* position_block) {
     position_block_ptr_ = position_block;
   }
 
@@ -155,23 +155,23 @@ class State {
     return timestamp_;
   }
 
-  TimedQuatParameterBlock* GetRotationBlock() {
+  QuatParameterBlock* GetRotationBlock() {
     return rotation_block_ptr_;
   }
 
-  Timed3dParameterBlock* GetVelocityBlock() {
+  Vec3dParameterBlock* GetVelocityBlock() {
     return velocity_block_ptr_;
   }
 
-  Timed3dParameterBlock* GetPositionBlock() {
+  Vec3dParameterBlock* GetPositionBlock() {
     return position_block_ptr_;
   }
 
  private:
   double timestamp_;
-  TimedQuatParameterBlock* rotation_block_ptr_;
-  Timed3dParameterBlock*   velocity_block_ptr_;
-  Timed3dParameterBlock*   position_block_ptr_;
+  QuatParameterBlock* rotation_block_ptr_;
+  Vec3dParameterBlock*   velocity_block_ptr_;
+  Vec3dParameterBlock*   position_block_ptr_;
 };
 
 
@@ -267,7 +267,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_position(std::stod(initial_position_str[0]), std::stod(initial_position_str[1]), std::stod(initial_position_str[2]));
-          Timed3dParameterBlock* position_parameter = new Timed3dParameterBlock(initial_position, ConverStrTime(time_stamp_str));
+          Vec3dParameterBlock* position_parameter = new Vec3dParameterBlock(initial_position);
           state_parameter_.at(0)->SetPositionBlock(position_parameter);
           optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetPositionBlock()->parameters(), 3);
 
@@ -278,7 +278,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
-          TimedQuatParameterBlock* rotation_parameter = new TimedQuatParameterBlock(initial_rotation, ConverStrTime(time_stamp_str));
+          QuatParameterBlock* rotation_parameter = new QuatParameterBlock(initial_rotation);
           state_parameter_.at(0)->SetRotationBlock(rotation_parameter);
           optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4);
 
@@ -289,7 +289,7 @@ class ExpLandmarkOptSLAM {
           }
 
           Eigen::Vector3d initial_velocity(std::stod(initial_velocity_str[0]), std::stod(initial_velocity_str[1]), std::stod(initial_velocity_str[2]));
-          Timed3dParameterBlock* velocity_parameter = new Timed3dParameterBlock(initial_velocity, ConverStrTime(time_stamp_str));
+          Vec3dParameterBlock* velocity_parameter = new Vec3dParameterBlock(initial_velocity);
           state_parameter_.at(0)->SetVelocityBlock(velocity_parameter);
           optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetVelocityBlock()->parameters(), 3);
 
@@ -326,7 +326,6 @@ class ExpLandmarkOptSLAM {
 
     std::string first_line_data_str;
     std::getline(input_file, first_line_data_str);
-
 
     std::string observation_data_str;
     while (std::getline(input_file, observation_data_str)) {

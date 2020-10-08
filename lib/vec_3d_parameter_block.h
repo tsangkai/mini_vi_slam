@@ -36,28 +36,26 @@
  * @author Stefan Leutenegger
  */
 
-#ifndef INCLUDE_TIMED_QUAT_PARAMETERBLOCK_H_
-#define INCLUDE_TIMED_QUAT_PARAMETERBLOCK_H_
+#ifndef INCLUDE_VEC_3D_PARAMETERBLOCK_H_
+#define INCLUDE_VEC_3D_PARAMETERBLOCK_H_
 
 #include <Eigen/Core>
-#include <Eigen/Geometry>
 
 #include "sized_parameter_block.h"
 // #include "PoseLocalParameterization.h"
 
-
 /// \brief Wraps the parameter block for a pose estimate
-class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaterniond> {
+class Vec3dParameterBlock: public SizedParameterBlock<3, 3, Eigen::Vector3d> {
  public:
 
   /// \brief The estimate type (3D vector).
-  typedef Eigen::Quaterniond estimate_t;
+  typedef Eigen::Vector3d estimate_t;
 
   /// \brief The base class type.
-  typedef SizedParameterBlock<4, 3, Eigen::Quaterniond> base_t;
+  typedef SizedParameterBlock<3, 3, estimate_t> base_t;
 
   /// \brief Default constructor (assumes not fixed).
-  TimedQuatParameterBlock(): 
+  Vec3dParameterBlock(): 
     base_t::SizedParameterBlock() {
       setFixed(false);
   }
@@ -66,51 +64,35 @@ class TimedQuatParameterBlock: public SizedParameterBlock<4, 3, Eigen::Quaternio
   /// @param[in] T_WS The pose estimate as T_WS.
   /// @param[in] id The (unique) ID of this block.
   /// @param[in] timestamp The timestamp of this state.
-  TimedQuatParameterBlock(const Eigen::Quaterniond& quat, const double timestamp) {
-    setEstimate(quat);
-    setTimestamp(timestamp);
+  Vec3dParameterBlock(const Eigen::Vector3d& point) {
+    setEstimate(point);
     setFixed(false);
   }
 
+
   /// \brief Trivial destructor.
-  ~TimedQuatParameterBlock() {}
+  ~Vec3dParameterBlock() {};
 
   // setters
   /// @brief Set estimate of this parameter block.
   /// @param[in] T_WS The estimate to set this to.
-  void setEstimate(const Eigen::Quaterniond& quat) {
-      parameters_[0] = quat.w();
-      parameters_[1] = quat.x();
-      parameters_[2] = quat.y();
-      parameters_[3] = quat.z();
-  }
-
-  /// @param[in] timestamp The timestamp of this state.
-  void setTimestamp(const double timestamp){
-    timestamp_=timestamp;
+  void setEstimate(const Eigen::Vector3d& point) {
+    // hack: only do "Euclidean" points for now...
+    for (int i = 0; i < base_t::Dimension; ++i)
+      parameters_[i] = point[i];
   }
 
   // getters
   /// @brief Get estimate.
   /// \return The estimate.
-  Eigen::Quaterniond estimate() const {
-    return Eigen::Quaterniond(parameters_[0], parameters_[1], parameters_[2], parameters_[3]);
-  }
-
-  /// \brief Get the time.
-  /// \return The timestamp of this state.
-  double timestamp() const {
-    return timestamp_;
+  Eigen::Vector3d estimate() const {
+    return Eigen::Vector3d(parameters_[0], parameters_[1], parameters_[2]);
   }
 
   /// @brief Return parameter block type as string
-  virtual std::string typeInfo() const {
-    return "TimedQuatParameterBlock";
-  }
+  virtual std::string typeInfo() const {return "Vec3dParameterBlock";}
 
-private:
-  double timestamp_; ///< Time of this state.
 };
 
 
-#endif /* INCLUDE_TIMED_QUAT_PARAMETERBLOCK_H_ */
+#endif /* INCLUDE_TIMED_3D_PARAMETERBLOCK_H_ */

@@ -11,8 +11,8 @@
 #include <Eigen/Core>
 
 #include "landmark_parameter_block.h"
-#include "timed_3d_parameter_block.h"
-#include "timed_quat_parameter_block.h"
+#include "vec_3d_parameter_block.h"
+#include "quat_parameter_block.h"
 #include "reprojection_error.h"
 
 
@@ -33,16 +33,16 @@ class TriangularizationProblem {
   bool Initialize() {
 
     // state 0
-    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0.0));
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(1,1,1), 0.0));
+    rotation_parameter_.push_back(new QuatParameterBlock(Eigen::Quaterniond::UnitRandom()));
+    position_parameter_.push_back(new Vec3dParameterBlock(Eigen::Vector3d(1,1,1)));
 
     // state 1
-    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0.1));
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(-1,-1,-1), 0.1));
+    rotation_parameter_.push_back(new QuatParameterBlock(Eigen::Quaterniond::UnitRandom()));
+    position_parameter_.push_back(new Vec3dParameterBlock(Eigen::Vector3d(-1,-1,-1)));
 
     // state 2
-    rotation_parameter_.push_back(new TimedQuatParameterBlock(Eigen::Quaterniond::UnitRandom(), 0.2));
-    position_parameter_.push_back(new Timed3dParameterBlock(Eigen::Vector3d(3,4,-6), 0.2));
+    rotation_parameter_.push_back(new QuatParameterBlock(Eigen::Quaterniond::UnitRandom()));
+    position_parameter_.push_back(new Vec3dParameterBlock(Eigen::Vector3d(3,4,-6)));
 
     // one landmark
     landmark_parameter_.push_back(new LandmarkParameterBlock(initial_landmark_position_));
@@ -137,8 +137,8 @@ class TriangularizationProblem {
   double principal_point_[2];
 
   // data storage (parameters to be optimized)
-  std::vector<TimedQuatParameterBlock*> rotation_parameter_;
-  std::vector<Timed3dParameterBlock*>   position_parameter_;
+  std::vector<QuatParameterBlock*> rotation_parameter_;
+  std::vector<Vec3dParameterBlock*>   position_parameter_;
   std::vector<LandmarkParameterBlock*>  landmark_parameter_;
 
   Eigen::Vector3d real_landmark_position_;

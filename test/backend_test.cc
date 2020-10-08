@@ -47,8 +47,8 @@
 #include <ceres/rotation.h>
 
 #include "landmark_parameter_block.h"
-#include "timed_3d_parameter_block.h"
-#include "timed_quat_parameter_block.h"
+#include "vec_3d_parameter_block.h"
+#include "quat_parameter_block.h"
 
 /***
 struct SnavelyReprojectionError {
@@ -256,8 +256,8 @@ class BALProblem {
 
     // declare all parameter blocks
     for (int i=0; i < num_poses_; ++i) {
-      rotation_parameter_.push_back(TimedQuatParameterBlock(Eigen::Quaterniond(), i));
-      translation_parameter_.push_back(Timed3dParameterBlock(Eigen::Vector3d(), i));
+      rotation_parameter_.push_back(QuatParameterBlock(Eigen::Quaterniond()));
+      translation_parameter_.push_back(Vec3dParameterBlock(Eigen::Vector3d()));
       camera_parameter_.push_back(new double[3]);
     }
 
@@ -371,8 +371,8 @@ class BALProblem {
   ceres::Solver::Options optimization_options_;
   ceres::Solver::Summary optimization_summary_;
 
-  std::vector<TimedQuatParameterBlock> rotation_parameter_;
-  std::vector<Timed3dParameterBlock> translation_parameter_;
+  std::vector<QuatParameterBlock> rotation_parameter_;
+  std::vector<Vec3dParameterBlock> translation_parameter_;
   std::vector<double*> camera_parameter_;
   std::vector<LandmarkParameterBlock> landmark_parameter_;
 };
