@@ -16,7 +16,10 @@
 #include "timed_3d_parameter_block.h"
 #include "timed_quat_parameter_block.h"
 #include "imu_error.h"
+#include "pre_int_imu_error.h"
 #include "reprojection_error.h"
+
+
 
 // TODO: initialized from config files
 Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
@@ -470,10 +473,6 @@ class ExpLandmarkOptSLAM {
       Delta_R = Delta_R * Exp(imu_dt_ * (imu_data_vec.at(i).gyro_ - gyro_bias));
     }
 
-    std::cout << Delta_R << std::endl;
-    std::cout << Delta_V << std::endl;
-    std::cout << Delta_P << std::endl;
-
     return PreIntIMUData(imu_data_vec.size()*imu_dt_, Delta_R, Delta_V, Delta_P);
   }
 
@@ -482,7 +481,7 @@ class ExpLandmarkOptSLAM {
     std::cout << "Read IMU data at " << imu_file_path << std::endl;
 
     std::ifstream input_file(imu_file_path);
-    
+
     assert(("Could not open IMU file.", input_file.is_open()));
 
     // Read the column names
@@ -500,41 +499,49 @@ class ExpLandmarkOptSLAM {
       IMUData imu_data(imu_data_str);
 
       if (time_begin_ <= imu_data.timestamp_ && imu_data.timestamp_ <= time_end_) {
-        // imu_data_vec.push_back(imu_data);
-
         
         if ((state_idx + 1) == state_parameter_.size()) {
-          // imu_data_vec_small.push_back(imu_data_vec.at(i));
           imu_data_vec.push_back(imu_data);
 
         }
         else if (imu_data.timestamp_ < state_parameter_.at(state_idx+1)->GetTimestamp()) {
-          // imu_data_vec_small.push_back(imu_data_vec.at(i));
           imu_data_vec.push_back(imu_data);
 
         }
         else {
           // preintegrate imu_data_vec_small
-          std::cout << std::endl;
-          std::cout << state_parameter_.at(state_idx)->GetTimestamp() << ": " << imu_data_vec.size() << std::endl;
-
           PreIntIMUData pre_int_imu_data = Preintegrate(imu_data_vec);
+          double dT = pre_int_imu_data.dt_;
 
-          // dead-reckoning to initialize 
-
+          // current state
           Eigen::Quaterniond current_rotation = state_parameter_.at(state_idx)->GetRotationBlock()->estimate();
           Eigen::Vector3d current_velocity = state_parameter_.at(state_idx)->GetVelocityBlock()->estimate();
           Eigen::Vector3d current_position = state_parameter_.at(state_idx)->GetPositionBlock()->estimate();
 
+          // add imu constraint
+          ceres::CostFunction* cost_function = new PreIntImuError(Eigen::Quaterniond(pre_int_imu_data.d_rotation_),
+                                                                  pre_int_imu_data.d_velocity_,
+                                                                  pre_int_imu_data.d_position_,
+                                                                  pre_int_imu_data.dt_);
+
+          optimization_problem_.AddResidualBlock(cost_function,
+                                                 NULL,
+                                                 state_parameter_.at(state_idx+1)->GetRotationBlock()->parameters(),
+                                                 state_parameter_.at(state_idx+1)->GetVelocityBlock()->parameters(),
+                                                 state_parameter_.at(state_idx+1)->GetPositionBlock()->parameters(),
+                                                 state_parameter_.at(state_idx)->GetRotationBlock()->parameters(),
+                                                 state_parameter_.at(state_idx)->GetVelocityBlock()->parameters(),
+                                                 state_parameter_.at(state_idx)->GetPositionBlock()->parameters());   
+
           state_idx++;
           
-          double dT = pre_int_imu_data.dt_;
+          // dead-reckoning to initialize 
           state_parameter_.at(state_idx)->GetRotationBlock()->setEstimate(Eigen::Quaterniond(current_rotation*pre_int_imu_data.d_rotation_));
           state_parameter_.at(state_idx)->GetVelocityBlock()->setEstimate(current_velocity + dT*gravity + current_rotation.normalized().toRotationMatrix()*pre_int_imu_data.d_velocity_);
           state_parameter_.at(state_idx)->GetPositionBlock()->setEstimate(current_position + dT*current_velocity + 0.5*(dT*dT)*gravity + current_rotation.normalized().toRotationMatrix()*pre_int_imu_data.d_position_);
 
 
-          // empty imu_data_vec_small
+          // empty imu_data_vec
           imu_data_vec.clear();
 
           // add current imu data in
@@ -544,68 +551,12 @@ class ExpLandmarkOptSLAM {
       }
     }
 
-
-
-
-    // dead-reckoning to initialize 
-    /***
-    for (size_t i=0; i<imu_data_vec.size()-1; ++i) {
-        
-      double time_diff = position_parameter_.at(i+1)->timestamp() - position_parameter_.at(i)->timestamp();
-
-      // for debugging now
-      // parameters are from ground truth data currently, and can be estimatd in the optimization problem later
-      Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
-      Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
-      Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
-
-      Eigen::Vector3d accel_measurement = imu_data_vec.at(i).GetAccelMeasurement();
-      Eigen::Vector3d gyro_measurement = imu_data_vec.at(i).GetGyroMeasurement();      
-      Eigen::Vector3d accel_plus_gravity = rotation_parameter_.at(i)->estimate().normalized().toRotationMatrix()*(accel_measurement - accel_bias) + gravity;
-      
-      Eigen::Quaterniond rotation_t_plus_1 = rotation_parameter_.at(i)->estimate().normalized() * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 
-                                                                                                                        0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 
-                                                                                                                        0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
-      Eigen::Vector3d velocity_t_plus_1 = velocity_parameter_.at(i)->estimate() + time_diff*accel_plus_gravity;
-      Eigen::Vector3d position_t_plus_1 = position_parameter_.at(i)->estimate() + time_diff*velocity_parameter_.at(i)->estimate() + (0.5*time_diff*time_diff)*accel_plus_gravity;
-
-
-
-      rotation_parameter_.at(i+1)->setEstimate(rotation_t_plus_1);
-      velocity_parameter_.at(i+1)->setEstimate(velocity_t_plus_1);
-      position_parameter_.at(i+1)->setEstimate(position_t_plus_1);
-      
-      // add constraints
-      ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).GetGyroMeasurement(),
-                                                        imu_data_vec.at(i).GetAccelMeasurement(),
-                                                        time_diff);
-
-      optimization_problem_.AddResidualBlock(cost_function,
-                                             NULL,
-                                             rotation_parameter_.at(i+1)->parameters(),
-                                             velocity_parameter_.at(i+1)->parameters(),
-                                             position_parameter_.at(i+1)->parameters(),
-                                             rotation_parameter_.at(i)->parameters(),
-                                             velocity_parameter_.at(i)->parameters(),
-                                             position_parameter_.at(i)->parameters());    
-
-      optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 0, -2.8);
-      optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 1,  4.2);
-      optimization_problem_.SetParameterLowerBound(position_parameter_.at(i+1)->parameters(), 2, -1.8);
-
-      optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 0, 1.8);
-      optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 1, 8.8);
-      optimization_problem_.SetParameterUpperBound(position_parameter_.at(i+1)->parameters(), 2, 2.8);
-    }
-    ***/
-
     input_file.close();
     std::cout << "Finished reading IMU data." << std::endl;
     return true;
   }
 
 
-  /***
   bool SolveOptimizationProblem() {
 
     std::cout << "Begin solving the optimization problem." << std::endl;
@@ -617,10 +568,10 @@ class ExpLandmarkOptSLAM {
     optimization_options_.max_num_iterations = tri_max_num_iterations_;
     optimization_options_.function_tolerance = 1e-9;
 
-    for (size_t i=1; i<position_parameter_.size(); ++i) {
-      optimization_problem_.SetParameterBlockConstant(rotation_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockConstant(velocity_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockConstant(position_parameter_.at(i)->parameters());
+    for (size_t i=1; i<state_parameter_.size(); ++i) {
+      optimization_problem_.SetParameterBlockConstant(state_parameter_.at(i)->GetRotationBlock()->parameters());
+      optimization_problem_.SetParameterBlockConstant(state_parameter_.at(i)->GetVelocityBlock()->parameters());
+      optimization_problem_.SetParameterBlockConstant(state_parameter_.at(i)->GetPositionBlock()->parameters());
     }
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
@@ -628,12 +579,13 @@ class ExpLandmarkOptSLAM {
 
 
     // Step 2: optimize trajectory
-    optimization_options_.max_num_iterations = 30;
+    optimization_options_.max_num_iterations = 60;
 
-    for (size_t i=1; i<position_parameter_.size(); ++i) {
-      optimization_problem_.SetParameterBlockVariable(rotation_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockVariable(velocity_parameter_.at(i)->parameters());
-      optimization_problem_.SetParameterBlockVariable(position_parameter_.at(i)->parameters());
+
+    for (size_t i=1; i<state_parameter_.size(); ++i) {
+      optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
+      optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetVelocityBlock()->parameters());
+      optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetPositionBlock()->parameters());
     }
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
@@ -641,7 +593,7 @@ class ExpLandmarkOptSLAM {
 
     return true;
   }
-  ***/
+
 
   bool OutputOptimizationResult() {
 
@@ -725,7 +677,7 @@ int main(int argc, char **argv) {
   std::string imu_file_path = euroc_dataset_path + "imu0/data.csv";
   slam_problem.ReadIMUData(imu_file_path);
 
-  // slam_problem.SolveOptimizationProblem();
+  slam_problem.SolveOptimizationProblem();
   slam_problem.OutputOptimizationResult();
 
   return 0;

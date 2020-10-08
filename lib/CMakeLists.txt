@@ -5,6 +5,7 @@ add_library(backend_lib STATIC
   timed_3d_parameter_block.h
   timed_quat_parameter_block.h
   imu_error.h
+  pre_int_imu_error.h
   reprojection_error.h
 )
 

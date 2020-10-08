@@ -4,8 +4,8 @@ time_window: ["1403636649313555456", "1403636658963555584"]   # initial trial
 # time_window: ["1403636665000000000", "1403636722000000000"]     # from ground_truth_process
 
 frontend:
-  downsample_rate: 8
+  downsample_rate: 2
   landmark_obs_count_threshold: 4
 
 backend:
-  tri_max_num_iterations: 16                 # triangularization
+  tri_max_num_iterations: 14 #16                 # triangularization
