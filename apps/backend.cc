@@ -590,7 +590,7 @@ class ExpLandmarkOptSLAM {
     std::cout << optimization_summary_.FullReport() << "\n";
 
     // Step 2: optimize trajectory
-    optimization_options_.max_num_iterations = 60;
+    optimization_options_.max_num_iterations = 200;
 
 
     for (size_t i=1; i<state_parameter_.size(); ++i) {
