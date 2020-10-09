@@ -285,9 +285,6 @@ class PreIntImuError :
 
         J_p_t.block<3,3>(7,0) = rotation_t.toRotationMatrix().transpose() * (-1)*Eigen::Matrix3d::Identity();
       }
-
-
-
     }
 
     return true;
