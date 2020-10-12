@@ -1,7 +1,7 @@
 
 
 /**
- * @file ImuError.hpp
+ * @file imu_error.hpp
  * @brief Header file for the ImuError class.
  * @author Tsang-Kai Chang
  */
@@ -177,10 +177,7 @@ class ImuError :
         J_p_t1(7,0) = 1.0;
         J_p_t1(8,1) = 1.0;
         J_p_t1(9,2) = 1.0;
-      }  
-
-
-
+      }
 
 
       // rotation_t
@@ -261,9 +258,6 @@ class ImuError :
         J_p_t(8,1) = -1.0;
         J_p_t(9,2) = -1.0;
       }  
-
-
-
     }
 
     return true;

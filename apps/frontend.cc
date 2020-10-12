@@ -268,7 +268,7 @@ class Frontend {
     }
 
     std::cout << "total landmark counts: " << landmark_count << std::endl;
-    std::cout << "total landmark counts: " << landmark_count_after_threshold << std::endl;
+    std::cout << "total landmark counts after thresholding observed number: " << landmark_count_after_threshold << std::endl;
 
     return true;
   }

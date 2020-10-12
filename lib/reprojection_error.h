@@ -77,9 +77,10 @@ class ReprojectionError:
                 double* residuals,
                 double** jacobians) const {
 
+    // the input order of Eigen::Quaternion() is different from the underlying data structure
     Eigen::Quaterniond rotation(parameters[0][0], parameters[0][1], parameters[0][2], parameters[0][3]);
-    Eigen::Vector3d position(parameters[1][0], parameters[1][1], parameters[1][2]);
-    Eigen::Vector3d landmark(parameters[2][0], parameters[2][1], parameters[2][2]);
+    Eigen::Vector3d position(parameters[1]);
+    Eigen::Vector3d landmark(parameters[2]);
 
     // navigation to body, which is just the state
     Eigen::Transform<double, 3, Eigen::Affine> T_nb = Eigen::Transform<double, 3, Eigen::Affine>::Identity();

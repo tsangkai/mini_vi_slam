@@ -8,4 +8,4 @@ frontend:
   landmark_obs_count_threshold: 4
 
 backend:
-  tri_max_num_iterations: 18                 # triangularization
+  tri_max_num_iterations: 16 # 16   # triangularization

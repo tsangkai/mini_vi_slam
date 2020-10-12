@@ -26,8 +26,6 @@ Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);
 Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
 Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
 
-
-
                                                          // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
   std::string time_str_sec = time_str.substr(7,3);       // second
@@ -278,7 +276,7 @@ class ExpLandmarkOptSLAM {
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
           QuatParameterBlock* rotation_parameter = new QuatParameterBlock(initial_rotation);
           state_parameter_.at(0)->SetRotationBlock(rotation_parameter);
-          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4);
+          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4, new ceres::QuaternionParameterization());
 
           // velocity
           std::string initial_velocity_str[3];
@@ -335,6 +333,10 @@ class ExpLandmarkOptSLAM {
 
       if (state_parameter_.back()->GetTimestamp() < observation_data.GetTimestamp()) {
           state_parameter_.push_back(new State(observation_data.GetTimestamp()));
+
+
+          optimization_problem_.AddParameterBlock(state_parameter_.back()->GetRotationBlock()->parameters(), 4, new ceres::QuaternionParameterization());
+
       }
       else if (state_parameter_.back()->GetTimestamp() == observation_data.GetTimestamp()) {
       }
@@ -355,6 +357,7 @@ class ExpLandmarkOptSLAM {
                                                                  T_bc_,
                                                                  focal_length_,
                                                                  principal_point_);
+      
 
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
@@ -400,7 +403,7 @@ class ExpLandmarkOptSLAM {
     std::getline(input_file, line);
 
     std::ofstream output_file("ground_truth.csv");
-    output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z,b_w_x,b_w_y,b_w_z,b_a_x,b_a_y,b_a_z\n";
+    output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z,v_x,v_y,v_z,b_w_x,b_w_y,b_w_z,b_a_x,b_a_y,b_a_z\n";
 
     size_t state_idx = 0;
 
@@ -430,11 +433,15 @@ class ExpLandmarkOptSLAM {
               output_file << data;
             }
 
-            // ignore velocity part
+            // velocity
             for (int i=0; i<3; ++i) {                    
               std::getline(s_stream, data, ',');
-            }
 
+              output_file << ",";
+              output_file << data;
+            }
+            
+            // bias
             for (int i=0; i<6; ++i) {                    
               std::getline(s_stream, data, ',');
 
@@ -511,7 +518,6 @@ class ExpLandmarkOptSLAM {
         rotation_dr = rotation_dr.normalized() * Eigen::Quaterniond(1, 0.5*imu_dt_*(imu_data.gyro_(0)-gyro_bias(0)), 
                                                                        0.5*imu_dt_*(imu_data.gyro_(1)-gyro_bias(1)), 
                                                                        0.5*imu_dt_*(imu_data.gyro_(2)-gyro_bias(2)));
-
       
         if ((state_idx + 1) == state_parameter_.size()) {
           imu_data_vec.push_back(imu_data);
@@ -532,7 +538,7 @@ class ExpLandmarkOptSLAM {
           Eigen::Vector3d current_position = state_parameter_.at(state_idx)->GetPositionBlock()->estimate();
 
           // add imu constraint
-          ceres::CostFunction* cost_function = new PreIntImuError(Eigen::Quaterniond(pre_int_imu_data.d_rotation_),
+          ceres::CostFunction* cost_function = new PreIntImuError(pre_int_imu_data.d_rotation_,
                                                                   pre_int_imu_data.d_velocity_,
                                                                   pre_int_imu_data.d_position_,
                                                                   pre_int_imu_data.dt_);
@@ -610,13 +616,16 @@ class ExpLandmarkOptSLAM {
 
     std::ofstream output_file("trajectory.csv");
 
-    output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z\n";
+    output_file << "timestamp,p_x,p_y,p_z,v_x,v_y,v_z,q_w,q_x,q_y,q_z\n";
 
     for (size_t i=1; i<state_parameter_.size(); ++i) {
       output_file << std::to_string(state_parameter_.at(i)->GetTimestamp()) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(0)) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(1)) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetPositionBlock()->estimate()(2)) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetVelocityBlock()->estimate()(0)) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetVelocityBlock()->estimate()(1)) << ",";
+      output_file << std::to_string(state_parameter_.at(i)->GetVelocityBlock()->estimate()(2)) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetRotationBlock()->estimate().w()) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetRotationBlock()->estimate().x()) << ",";
       output_file << std::to_string(state_parameter_.at(i)->GetRotationBlock()->estimate().y()) << ",";
