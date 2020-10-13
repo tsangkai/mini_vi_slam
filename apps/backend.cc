@@ -26,7 +26,7 @@ Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);
 Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
 Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
 
-                                                         // TODO: avoid data conversion
+// TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
   std::string time_str_sec = time_str.substr(7,3);       // second
   std::string time_str_nano_sec = time_str.substr(10);   // nano-second
@@ -133,6 +133,12 @@ class State {
     rotation_block_ptr_ = new QuatParameterBlock();
     velocity_block_ptr_ = new Vec3dParameterBlock();
     position_block_ptr_ = new Vec3dParameterBlock();
+  }
+
+  ~State() {
+    delete [] rotation_block_ptr_;
+    delete [] velocity_block_ptr_;
+    delete [] position_block_ptr_;
   }
 
   void SetRotationBlock(QuatParameterBlock* rotation_block) {
@@ -349,7 +355,6 @@ class ExpLandmarkOptSLAM {
       }
 
 
-
       landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0));
       // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());      
 
@@ -511,13 +516,13 @@ class ExpLandmarkOptSLAM {
 
         Eigen::Vector3d accel_measurement = imu_data.accel_;
         Eigen::Vector3d gyro_measurement = imu_data.gyro_;      
-        Eigen::Vector3d accel_plus_gravity = rotation_dr.normalized().toRotationMatrix()*(imu_data.accel_ - accel_bias) + gravity;
+        Eigen::Vector3d accel_plus_gravity = rotation_dr.toRotationMatrix()*(imu_data.accel_ - accel_bias) + gravity;
         
         position_dr = position_dr + imu_dt_*velocity_dr + 0.5*(imu_dt_*imu_dt_)*accel_plus_gravity;
         velocity_dr = velocity_dr + imu_dt_*accel_plus_gravity;
-        rotation_dr = rotation_dr.normalized() * Eigen::Quaterniond(1, 0.5*imu_dt_*(imu_data.gyro_(0)-gyro_bias(0)), 
-                                                                       0.5*imu_dt_*(imu_data.gyro_(1)-gyro_bias(1)), 
-                                                                       0.5*imu_dt_*(imu_data.gyro_(2)-gyro_bias(2)));
+        rotation_dr = rotation_dr * Eigen::Quaterniond(1, 0.5*imu_dt_*(imu_data.gyro_(0)-gyro_bias(0)), 
+                                                          0.5*imu_dt_*(imu_data.gyro_(1)-gyro_bias(1)), 
+                                                          0.5*imu_dt_*(imu_data.gyro_(2)-gyro_bias(2)));
       
         if ((state_idx + 1) == state_parameter_.size()) {
           imu_data_vec.push_back(imu_data);
@@ -600,7 +605,7 @@ class ExpLandmarkOptSLAM {
 
 
     for (size_t i=1; i<state_parameter_.size(); ++i) {
-      optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
+      // optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
       optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetVelocityBlock()->parameters());
       optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetPositionBlock()->parameters());
     }

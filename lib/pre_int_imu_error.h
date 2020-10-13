@@ -11,55 +11,35 @@
 #ifndef INCLUDE_PRE_INT_IMU_ERROR_H_
 #define INCLUDE_PRE_INT_IMU_ERROR_H_
 
-#include <vector>
+#include <cmath>
 
-Eigen::Matrix3d Jacob_R_to_qw(Eigen::Quaterniond quat) {
+#include <ceres/ceres.h>
 
-  Eigen::Matrix3d J_R_to_qw;
 
-  J_R_to_qw <<          0, -2*quat.z(),  2*quat.y(),
-               2*quat.z(),           0, -2*quat.x(),
-              -2*quat.y(),  2*quat.x(),           0;
 
-  return J_R_to_qw;
+Eigen::Vector3d Log_q(Eigen::Quaterniond q) {
+
+  double a = acos(q.w() / q.norm());
+
+  if (abs(a) < 1e-8) {
+    return q.vec();
+  }
+
+  return (a / sin(a)) * q.vec();
 }
 
-Eigen::Matrix3d Jacob_R_to_qx(Eigen::Quaterniond quat) {
+Eigen::Matrix3d Skew(Eigen::Vector3d v) {
+  Eigen::Matrix3d m;
+  m <<     0, -v(2),  v(1),
+        v(2),     0, -v(0),
+       -v(1),  v(0),     0;
 
-  Eigen::Matrix3d J_R_to_qx;
-
-  J_R_to_qx <<          0,  2*quat.y(),  2*quat.z(),
-               2*quat.y(), -4*quat.x(), -2*quat.w(),
-               2*quat.z(),  2*quat.w(), -4*quat.x();
-
-  return J_R_to_qx;
-}
-
-Eigen::Matrix3d Jacob_R_to_qy(Eigen::Quaterniond quat) {
-
-  Eigen::Matrix3d J_R_to_qy;
-
-  J_R_to_qy << -4*quat.y(), 2*quat.x(),  2*quat.w(),
-                2*quat.x(),          0,  2*quat.z(),
-               -2*quat.w(), 2*quat.z(), -4*quat.y();
-
-  return J_R_to_qy;
-}
-
-Eigen::Matrix3d Jacob_R_to_qz(Eigen::Quaterniond quat) {
-
-  Eigen::Matrix3d J_R_to_qz;
-
-  J_R_to_qz << -4*quat.z(), -2*quat.w(), 2*quat.x(),
-                2*quat.w(), -4*quat.z(), 2*quat.y(),
-                2*quat.x(),  2*quat.y(),          0;
-
-  return J_R_to_qz;
+  return m;
 }
 
 /// \brief Implements a nonlinear IMU factor.
 class PreIntImuError :
-    public ceres::SizedCostFunction<10,     // number of residuals
+    public ceres::SizedCostFunction<9,     // number of residuals
         4,                         // number of parameters in q_{t+1}
         3,                         // number of parameters in v_{t+1}
         3,                         // number of parameters in p_{t+1}
@@ -73,10 +53,10 @@ class PreIntImuError :
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   /// \brief The base in ceres we derive from
-  typedef ceres::SizedCostFunction<10, 4, 3, 3, 4, 3, 3> base_t;
+  typedef ceres::SizedCostFunction<9, 4, 3, 3, 4, 3, 3> base_t;
 
   /// \brief The number of residuals
-  static const int kNumResiduals = 10;
+  static const int kNumResiduals = 9;
 
   /// \brief The type of the covariance.
   // typedef Eigen::Matrix<double, 15, 15> covariance_t;
@@ -107,15 +87,12 @@ class PreIntImuError :
                  const Eigen::Vector3d d_velocity,
                  const Eigen::Vector3d d_position,
                  const double dt) {
+
     d_rotation_ = d_rotation;
     d_velocity_ = d_velocity;
     d_position_ = d_position;
     dt_ = dt;
   }
-
-
-
-
 
 
   // error term and Jacobian implementation
@@ -142,16 +119,16 @@ class PreIntImuError :
     Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
 
     // residual vectors
-    Eigen::Map<Eigen::Quaterniond> r_rotation(residuals+0);
-    Eigen::Map<Eigen::Vector3d> r_velocity(residuals+4);      
-    Eigen::Map<Eigen::Vector3d> r_position(residuals+7);      
+    Eigen::Map<Eigen::Vector3d> r_rotation(residuals+0);
+    Eigen::Map<Eigen::Vector3d> r_velocity(residuals+3);      
+    Eigen::Map<Eigen::Vector3d> r_position(residuals+6);      
 
     Eigen::Vector3d v_diff = velocity_t1 - velocity_t - dt_*gravity;
     Eigen::Vector3d p_diff = position_t1 - position_t - dt_*velocity_t - 0.5*(dt_*dt_)*gravity;
 
-    r_rotation = rotation_t1.conjugate() * rotation_t * Eigen::Quaterniond(d_rotation_);
-    r_velocity = d_velocity_ - rotation_t.toRotationMatrix().transpose() * v_diff;
-    r_position = d_position_ - rotation_t.toRotationMatrix().transpose() * p_diff;
+    r_rotation = Log_q(rotation_t1.conjugate() * (rotation_t * Eigen::Quaterniond(d_rotation_)));   // checked
+    r_velocity = d_velocity_ - rotation_t.toRotationMatrix().transpose() * v_diff;                  // checked
+    r_position = d_position_ - rotation_t.toRotationMatrix().transpose() * p_diff;                  // checked
 
 
     /*********************************************************************************
@@ -164,115 +141,55 @@ class PreIntImuError :
 
       // rotation_t1
       if (jacobians[0] != NULL) {
+        Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t1(jacobians[0]);      
+        J_q_t1.setZero();
 
-        Eigen::Map<Eigen::Matrix<double, 10, 4, Eigen::RowMajor> > J_q_t1(jacobians[0]);      
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<4; ++j) {
-            J_q_t1(i,j) = 0.0;
-          }
-        }
-        
-        /***
-        Eigen::Quaterniond r_t_mul_r_meas = rotation_t * Eigen::Quaterniond(d_rotation_);
-        J_q_t1.block<4,4>(0,0) <<  r_t_mul_r_meas.w(),  r_t_mul_r_meas.x(),  r_t_mul_r_meas.y(),  r_t_mul_r_meas.z(),
-                                   r_t_mul_r_meas.x(), -r_t_mul_r_meas.w(), -r_t_mul_r_meas.z(),  r_t_mul_r_meas.y(),
-                                   r_t_mul_r_meas.y(),  r_t_mul_r_meas.z(), -r_t_mul_r_meas.w(), -r_t_mul_r_meas.x(),
-                                   r_t_mul_r_meas.z(), -r_t_mul_r_meas.y(),  r_t_mul_r_meas.x(), -r_t_mul_r_meas.w();
-        ***/
-        J_q_t1(0,0) = 1.0;
-        J_q_t1(1,1) = 1.0;
-        J_q_t1(2,2) = 1.0;
-        J_q_t1(3,3) = 1.0;
-
+        J_q_t1.block<3,3>(0,1) = Eigen::Matrix3d::Identity();                                      // checked
       }  
 
       // velocity_t1
       if (jacobians[1] != NULL) {
 
-        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_v_t1(jacobians[1]);
+        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_v_t1(jacobians[1]);
+        J_v_t1.setZero();
 
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_v_t1(i,j) = 0.0;
-          }
-        }
-
-        J_v_t1.block<3,3>(4,0) = (-1) * rotation_t.toRotationMatrix().transpose();
-
-
+        J_v_t1.block<3,3>(3,0) = (-1) * rotation_t.toRotationMatrix().transpose();                 // checked
       }  
-
 
       // position_t1
       if (jacobians[2] != NULL) {
-        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_p_t1(jacobians[2]);      
+        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_p_t1(jacobians[2]);      
+        J_p_t1.setZero();
 
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_p_t1(i,j) = 0.0;
-          }
-        }
-
-        J_p_t1.block<3,3>(7,0) = (-1) * rotation_t.toRotationMatrix().transpose();
-
+        J_p_t1.block<3,3>(6,0) = (-1) * rotation_t.toRotationMatrix().transpose();                 // checked
       }
 
       // rotation_t
       if (jacobians[3] != NULL) {
-        Eigen::Map<Eigen::Matrix<double, 10, 4, Eigen::RowMajor> > J_q_t(jacobians[3]);      
+        Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t(jacobians[3]);      
+        J_q_t.setZero();
 
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<4; ++j) {
-            J_q_t(i,j) = 0.0;
-          }
-        }
-
-        J_q_t(0,0) = -1.0;
-        J_q_t(1,1) = -1.0;
-        J_q_t(2,2) = -1.0;
-        J_q_t(3,3) = -1.0;        
-
-        J_q_t.block<3,1>(4,0) = (-1) * Jacob_R_to_qw(rotation_t).transpose() * v_diff;
-        J_q_t.block<3,1>(4,1) = (-1) * Jacob_R_to_qx(rotation_t).transpose() * v_diff;
-        J_q_t.block<3,1>(4,2) = (-1) * Jacob_R_to_qy(rotation_t).transpose() * v_diff;
-        J_q_t.block<3,1>(4,3) = (-1) * Jacob_R_to_qy(rotation_t).transpose() * v_diff;
- 
-        J_q_t.block<3,1>(7,0) = (-1) * Jacob_R_to_qw(rotation_t).transpose() * p_diff;
-        J_q_t.block<3,1>(7,1) = (-1) * Jacob_R_to_qx(rotation_t).transpose() * p_diff;
-        J_q_t.block<3,1>(7,2) = (-1) * Jacob_R_to_qy(rotation_t).transpose() * p_diff;
-        J_q_t.block<3,1>(7,3) = (-1) * Jacob_R_to_qy(rotation_t).transpose() * p_diff;
+        J_q_t.block<3,3>(0,1) = rotation_t1.toRotationMatrix().transpose();                        // checked
+        J_q_t.block<3,3>(3,1) = (-1) * Skew(rotation_t1.toRotationMatrix().transpose() * v_diff).transpose();                                   // ?????
+        J_q_t.block<3,3>(6,1) = (-1) * Skew(rotation_t1.toRotationMatrix().transpose() * p_diff).transpose();                                   // ?????
       }  
 
 
       // velocity_t
       if (jacobians[4] != NULL) {
+        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_v_t(jacobians[4]);
+        J_v_t.setZero();
 
-        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_v_t(jacobians[4]);
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_v_t(i,j) = 0.0;
-          }
-        }
-
-        J_v_t.block<3,3>(4,0) = rotation_t.toRotationMatrix().transpose();
-        J_v_t.block<3,3>(7,0) = dt_ * rotation_t.toRotationMatrix().transpose();
-
+        J_v_t.block<3,3>(3,0) = rotation_t.toRotationMatrix().transpose();                         // checked
+        J_v_t.block<3,3>(6,0) = dt_ * rotation_t.toRotationMatrix().transpose();                   // checked
       }  
 
       // position_t
       if (jacobians[5] != NULL) {
+        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_p_t(jacobians[5]);      
+        J_p_t.setZero();
 
-        Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_p_t(jacobians[5]);      
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_p_t(i,j) = 0.0;
-          }
-        }
-
-        J_p_t.block<3,3>(7,0) = rotation_t.toRotationMatrix().transpose();
+        J_p_t.block<3,3>(3,0) = rotation_t.toRotationMatrix().transpose();                         // checked
       }
     }
 

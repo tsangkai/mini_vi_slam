@@ -135,11 +135,7 @@ class ImuError :
 
         Eigen::Map<Eigen::Matrix<double, 10, 4, Eigen::RowMajor> > J_q_t1(jacobians[0]);      
 
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<4; ++j) {
-            J_q_t1(i,j) = 0.0;
-          }
-        }
+        J_q_t1.setZero();
 
         J_q_t1(0,0) = 1.0;
         J_q_t1(1,1) = 1.0;
@@ -149,14 +145,8 @@ class ImuError :
 
       // velocity_t1
       if (jacobians[1] != NULL) {
-
         Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_v_t1(jacobians[1]);      
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_v_t1(i,j) = 0.0;
-          }
-        }
+        J_v_t1.setZero();
 
         J_v_t1(4,0) = 1.0;
         J_v_t1(5,1) = 1.0;
@@ -165,14 +155,8 @@ class ImuError :
 
       // position_t1
       if (jacobians[2] != NULL) {
-
         Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_p_t1(jacobians[2]);      
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_p_t1(i,j) = 0.0;
-          }
-        }
+        J_p_t1.setZero();
 
         J_p_t1(7,0) = 1.0;
         J_p_t1(8,1) = 1.0;
@@ -183,12 +167,7 @@ class ImuError :
       // rotation_t
       if (jacobians[3] != NULL) {
         Eigen::Map<Eigen::Matrix<double, 10, 4, Eigen::RowMajor> > J_q_t(jacobians[3]);      
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<4; ++j) {
-            J_q_t(i,j) = 0.0;
-          }
-        }
+        J_q_t.setZero();
 
         J_q_t(0,0) = -1.0;
         J_q_t(1,1) = -1.0;
@@ -222,17 +201,10 @@ class ImuError :
         }
       }  
 
-
       // velocity_t
       if (jacobians[4] != NULL) {
-
         Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_v_t(jacobians[4]);      
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_v_t(i,j) = 0.0;
-          }
-        }
+        J_v_t.setZero();
 
         J_v_t(4,0) = -1.0;
         J_v_t(5,1) = -1.0;
@@ -245,14 +217,8 @@ class ImuError :
 
       // position_t
       if (jacobians[5] != NULL) {
-
         Eigen::Map<Eigen::Matrix<double, 10, 3, Eigen::RowMajor> > J_p_t(jacobians[5]);      
-
-        for (size_t i=0; i<10; ++i) {
-          for (size_t j=0; j<3; ++j) {
-            J_p_t(i,j) = 0.0;
-          }
-        }
+        J_p_t.setZero();
 
         J_p_t(7,0) = -1.0;
         J_p_t(8,1) = -1.0;

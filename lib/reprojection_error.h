@@ -124,6 +124,7 @@ class ReprojectionError:
 
         Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);      
 
+
         Eigen::MatrixXd J_lb_to_q(3,4);
         J_lb_to_q(0,0) = landmark_minus_p(0)*( 2)*rotation.w()+landmark_minus_p(1)*( 2)*rotation.z()+landmark_minus_p(2)*(-2)*rotation.y();
         J_lb_to_q(0,1) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
