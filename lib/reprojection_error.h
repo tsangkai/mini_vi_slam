@@ -11,6 +11,10 @@
 
 #include <ceres/ceres.h>
 
+#include "so3.h"
+
+
+
 /// \brief Reprojection error base class.
 class ReprojectionError:
     public ceres::SizedCostFunction<2,     // number of residuals
@@ -121,33 +125,16 @@ class ReprojectionError:
 
       // rotation
       if (jacobians[0] != NULL) {
+        Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);
+        J0.setZero();
 
-        Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);      
-
-
-        Eigen::MatrixXd J_lb_to_q(3,4);
-        J_lb_to_q(0,0) = landmark_minus_p(0)*( 2)*rotation.w()+landmark_minus_p(1)*( 2)*rotation.z()+landmark_minus_p(2)*(-2)*rotation.y();
-        J_lb_to_q(0,1) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
-        J_lb_to_q(0,2) = landmark_minus_p(0)*( 2)*rotation.y()+landmark_minus_p(1)*(-2)*rotation.x()+landmark_minus_p(2)*( 2)*rotation.w();
-        J_lb_to_q(0,3) = landmark_minus_p(0)*( 2)*rotation.z()+landmark_minus_p(1)*(-2)*rotation.w()+landmark_minus_p(2)*(-2)*rotation.x();
-
-        J_lb_to_q(1,0) = landmark_minus_p(0)*(-2)*rotation.z()+landmark_minus_p(1)*( 2)*rotation.w()+landmark_minus_p(2)*( 2)*rotation.x();
-        J_lb_to_q(1,1) = landmark_minus_p(0)*(-2)*rotation.y()+landmark_minus_p(1)*( 2)*rotation.x()+landmark_minus_p(2)*(-2)*rotation.w();
-        J_lb_to_q(1,2) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
-        J_lb_to_q(1,3) = landmark_minus_p(0)*( 2)*rotation.w()+landmark_minus_p(1)*( 2)*rotation.z()+landmark_minus_p(2)*(-2)*rotation.y();
-
-        J_lb_to_q(2,0) = landmark_minus_p(0)*( 2)*rotation.y()+landmark_minus_p(1)*(-2)*rotation.x()+landmark_minus_p(2)*( 2)*rotation.w();
-        J_lb_to_q(2,1) = landmark_minus_p(0)*(-2)*rotation.z()+landmark_minus_p(1)*( 2)*rotation.w()+landmark_minus_p(2)*( 2)*rotation.x();
-        J_lb_to_q(2,2) = landmark_minus_p(0)*(-2)*rotation.w()+landmark_minus_p(1)*(-2)*rotation.z()+landmark_minus_p(2)*( 2)*rotation.y();
-        J_lb_to_q(2,3) = landmark_minus_p(0)*(-2)*rotation.x()+landmark_minus_p(1)*(-2)*rotation.y()+landmark_minus_p(2)*(-2)*rotation.z();
-
-        J0 = J_residual_to_lc * J_lc_to_lb * J_lb_to_q;
+        Eigen::Matrix3d J_lb_to_q = T_nb.rotation().transpose() * Skew(landmark_minus_p);
+        J0.block<2,3>(0,1) = J_residual_to_lc * J_lc_to_lb * J_lb_to_q;
       }  
 
 
       // position
       if (jacobians[1] != NULL) {
-
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J1(jacobians[1]);       
 
         J1 = J_residual_to_lc * J_lc_to_lb * (-1) * rotation.toRotationMatrix().transpose(); 
@@ -157,7 +144,6 @@ class ReprojectionError:
 
       // landmark
       if (jacobians[2] != NULL) {
-
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J2(jacobians[2]);     
 
         J2 = J_residual_to_lc * J_lc_to_lb * rotation.toRotationMatrix().transpose();

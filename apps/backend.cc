@@ -12,6 +12,7 @@
 #include <opencv2/core/core.hpp>
 #include <Eigen/Core>
 
+#include "so3.h"
 #include "landmark_parameter_block.h"
 #include "vec_3d_parameter_block.h"
 #include "quat_parameter_block.h"
@@ -175,23 +176,6 @@ class State {
   Vec3dParameterBlock* velocity_block_ptr_;
   Vec3dParameterBlock* position_block_ptr_;
 };
-
-
-Eigen::Matrix3d Hat(Eigen::Vector3d vec) {
-  Eigen::Matrix3d hatted_matrix;
-  hatted_matrix <<      0 , -vec(2),  vec(1),
-                    vec(2),      0 , -vec(0),
-                   -vec(1),  vec(0),      0;
-
-  return hatted_matrix;
-}
-
-Eigen::Matrix3d Exp(Eigen::Vector3d omega) {
-  Eigen::Matrix3d hatted_omega = Hat(omega);
-  double bar_omega = acos(0.5*(hatted_omega.trace()-1));
-
-  return Eigen::Matrix3d::Identity() + (sin(bar_omega)/bar_omega) * hatted_omega + ((1-cos(bar_omega))/(bar_omega*bar_omega)) * hatted_omega*hatted_omega;
-}
 
 
 class ExpLandmarkOptSLAM {
@@ -601,11 +585,11 @@ class ExpLandmarkOptSLAM {
     std::cout << optimization_summary_.FullReport() << "\n";
 
     // Step 2: optimize trajectory
-    optimization_options_.max_num_iterations = 200;
+    optimization_options_.max_num_iterations = 80;
 
 
     for (size_t i=1; i<state_parameter_.size(); ++i) {
-      // optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
+      optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
       optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetVelocityBlock()->parameters());
       optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetPositionBlock()->parameters());
     }
