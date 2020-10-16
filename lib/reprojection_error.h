@@ -105,18 +105,6 @@ class ReprojectionError:
     Eigen::Vector4d h_landmark_b = T_bn * h_landmark_n;
     Eigen::Vector4d h_landmark_c = T_cb * h_landmark_b;
 
-    // navigation to body, which is just the state
-    /***
-    Eigen::Transform<double, 3, Eigen::Affine> T_nb = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
-    T_nb.rotate(rotation);
-    T_nb.translate(position);
-
-
-    Eigen::Vector3d landmark_b = T_nb.inverse() * landmark;
-    Eigen::Vector3d landmark_c = T_bc_.inverse() * landmark_b;
-    ***/
-
-
     measurement_t keypoint;
     keypoint[0] = h_landmark_c[0] / h_landmark_c[2];
     keypoint[1] = h_landmark_c[1] / h_landmark_c[2];
