@@ -188,20 +188,20 @@ class ExpLandmarkOptSLAM {
 
     cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];            // from camera frame to body frame
 
-    Eigen::Matrix4d T_BC;
-    T_BC  << T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 
-             T_BC_node[4],  T_BC_node[5],  T_BC_node[6],  T_BC_node[7], 
-             T_BC_node[8],  T_BC_node[9],  T_BC_node[10], T_BC_node[11], 
-             T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
+    // Eigen::Matrix4d T_BC;
+    T_bc_  <<  T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 
+               T_BC_node[4],  T_BC_node[5],  T_BC_node[6],  T_BC_node[7], 
+               T_BC_node[8],  T_BC_node[9], T_BC_node[10], T_BC_node[11], 
+              T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
 
-    T_bc_ = T_BC;
+    //T_bc_ = T_BC;
 
-    double focal_length_0 = experiment_config_file["cameras"][0]["focal_length"][0];  // i don't know the unit!!!!
-    double focal_length_1 = experiment_config_file["cameras"][0]["focal_length"][1];
-    focal_length_ = 0.5*focal_length_0 + 0.5*focal_length_1;
+    fu_ = experiment_config_file["cameras"][0]["focal_length"][0];
+    fv_ = experiment_config_file["cameras"][0]["focal_length"][1];
+    // focal_length_ = 0.5*focal_length_0 + 0.5*focal_length_1;
 
-    principal_point_[0] = experiment_config_file["cameras"][0]["principal_point"][0];
-    principal_point_[1] = experiment_config_file["cameras"][0]["principal_point"][1];
+    cu_ = experiment_config_file["cameras"][0]["principal_point"][0];
+    cv_ = experiment_config_file["cameras"][0]["principal_point"][1];
     
     return true;
   }
@@ -472,8 +472,8 @@ class ExpLandmarkOptSLAM {
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
                                                                  T_bc_,
-                                                                 focal_length_,
-                                                                 principal_point_);
+                                                                 fu_, fv_,
+                                                                 cu_, cv_);
 
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
@@ -581,10 +581,12 @@ class ExpLandmarkOptSLAM {
   double time_end_;
   int tri_max_num_iterations_;
 
-  // camera intrinsic parameters
-  Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
-  double focal_length_;
-  double principal_point_[2];
+  // Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
+  Eigen::Matrix4d T_bc_;
+  double fu_;   // focal length u
+  double fv_;
+  double cu_;   // image center u
+  double cv_;   // image center v
 
   // parameter containers
   std::vector<State*>                   state_parameter_;

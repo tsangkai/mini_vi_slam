@@ -1,31 +1,15 @@
 
 ###
 
-add_executable(backend_triangularization backend_triangularization.cc)
+add_executable(reprojection_error_test reprojection_error_test.cc)
 
-target_include_directories(backend_triangularization
+target_include_directories(reprojection_error_test
   PUBLIC ${CERES_INCLUDE_DIRS}     
   PUBLIC ${EIGEN3_INCLUDE_DIR}
   PUBLIC backend_lib
 )
 
-target_link_libraries(backend_triangularization
-  PUBLIC ceres
-  PUBLIC ${EIGEN3_LIBS}
-  PUBLIC backend_lib
-)
-
-###
-
-add_executable(backend_test backend_test.cc)
-
-target_include_directories(backend_test
-  PUBLIC ${CERES_INCLUDE_DIRS}     
-  PUBLIC ${EIGEN3_INCLUDE_DIR}
-  PUBLIC backend_lib
-)
-
-target_link_libraries(backend_test
+target_link_libraries(reprojection_error_test
   PUBLIC ceres
   PUBLIC ${EIGEN3_LIBS}
   PUBLIC backend_lib

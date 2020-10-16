@@ -39,15 +39,16 @@ class ReprojectionError:
 
   // TODO(tsangkai): set camera intrinsic as static class member
   ReprojectionError(const measurement_t & measurement, 
-                    Eigen::Transform<double, 3, Eigen::Affine> T_bc,
-                    double focal, 
-                    double* principle_point) {
+                    Eigen::Matrix4d T_bc,
+                    double fu, double fv, 
+                    double cu, double cv) {
     setMeasurement(measurement);
 
     T_bc_ = T_bc;
-    focal_ = focal;
-    principle_point_[0] = principle_point[0];
-    principle_point_[1] = principle_point[1];
+    fu_ = fu;
+    fv_ = fv;
+    cu_ = cu;
+    cv_ = cv;
   }
 
   /// \brief Trivial destructor.
@@ -70,35 +71,59 @@ class ReprojectionError:
 
 
   // error term and Jacobian implementation
-  /**
-   * @brief This evaluates the error term and additionally computes the Jacobians.
-   * @param parameters Pointer to the parameters (see ceres)
-   * @param residuals Pointer to the residual vector (see ceres)
-   * @param jacobians Pointer to the Jacobians (see ceres)
-   * @return success of th evaluation.
-   */
+  // (n)avigation = (w)orld
+  // (b)ody frame = (s)ensor
+  // (c)amera frame
   bool Evaluate(double const* const * parameters, 
                 double* residuals,
                 double** jacobians) const {
 
     // the input order of Eigen::Quaternion() is different from the underlying data structure
-    Eigen::Quaterniond rotation(parameters[0][0], parameters[0][1], parameters[0][2], parameters[0][3]);
-    Eigen::Vector3d position(parameters[1]);
-    Eigen::Vector3d landmark(parameters[2]);
+    Eigen::Quaterniond q_nb(parameters[0][0], parameters[0][1], parameters[0][2], parameters[0][3]);
+    Eigen::Vector3d t_nb(parameters[1]);
+    Eigen::Vector4d h_landmark_n(parameters[2][0], parameters[2][1], parameters[2][2], 1);
+    // Eigen::Vector3d landmark(parameters[2]);
+
+    // from body frame to camera frame
+    Eigen::Matrix3d R_bc = T_bc_.topLeftCorner<3,3>();
+    Eigen::Matrix3d R_cb = R_bc.transpose();
+    Eigen::Vector3d t_bc = T_bc_.topRightCorner<3,1>();
+
+    Eigen::Matrix4d T_cb = Eigen::Matrix4d::Identity();
+    T_cb.topLeftCorner<3,3>() = R_cb;
+    T_cb.topRightCorner<3,1>() = -R_cb * t_bc;
+
+    // from nagivation frame to body frame
+    Eigen::Matrix3d R_nb = q_nb.toRotationMatrix();
+    Eigen::Matrix3d R_bn = R_nb.transpose();
+
+    Eigen::Matrix4d T_bn = Eigen::Matrix4d::Identity();
+    T_bn.topLeftCorner<3,3>() = R_bn;
+    T_bn.topRightCorner<3,1>() = -R_bn * t_nb;
+
+    // homogeneous transformation of the landmark to camera frame
+    Eigen::Vector4d h_landmark_b = T_bn * h_landmark_n;
+    Eigen::Vector4d h_landmark_c = T_cb * h_landmark_b;
 
     // navigation to body, which is just the state
+    /***
     Eigen::Transform<double, 3, Eigen::Affine> T_nb = Eigen::Transform<double, 3, Eigen::Affine>::Identity();
     T_nb.rotate(rotation);
     T_nb.translate(position);
 
-    Eigen::Vector3d landmark_minus_p = landmark - position;
 
     Eigen::Vector3d landmark_b = T_nb.inverse() * landmark;
     Eigen::Vector3d landmark_c = T_bc_.inverse() * landmark_b;
+    ***/
+
+
+    measurement_t keypoint;
+    keypoint[0] = h_landmark_c[0] / h_landmark_c[2];
+    keypoint[1] = h_landmark_c[1] / h_landmark_c[2];
 
     // PinholeCamera.hpp: 209
-    residuals[0] = -focal_ * landmark_c(0) / landmark_c(2) + principle_point_[0] - measurement_(0);
-    residuals[1] = -focal_ * landmark_c(1) / landmark_c(2) + principle_point_[1] - measurement_(1);
+    residuals[0] = fu_ * keypoint[0] + cu_ - measurement_[0];
+    residuals[1] = fv_ * keypoint[0] + cv_ - measurement_[1];
 
 
 
@@ -110,18 +135,22 @@ class ReprojectionError:
 
 
     if (jacobians != NULL) {
-      
-      // chain rule
-      Eigen::MatrixXd J_residual_to_lc(2,3);
-      J_residual_to_lc(0,0) = -focal_ / landmark_c(2);
-      J_residual_to_lc(0,1) = 0;
-      J_residual_to_lc(0,2) = focal_ * landmark_c(0) / (landmark_c(2)*landmark_c(2));
-      J_residual_to_lc(1,0) = 0;
-      J_residual_to_lc(1,1) = -focal_ / landmark_c(2);
-      J_residual_to_lc(1,2) = focal_ * landmark_c(1) / (landmark_c(2)*landmark_c(2));
 
-      Eigen::MatrixXd J_lc_to_lb(3,3);
-      J_lc_to_lb = T_bc_.rotation().transpose();
+      Eigen::Matrix2d J_residual_to_kp;
+      J_residual_to_kp << fu_, 0,
+                          0, fv_;
+
+      Eigen::MatrixXd J_kp_to_lm_c(2,3);
+      double r_lm_c_2 = 1 / h_landmark_c[2];
+      J_kp_to_lm_c << r_lm_c_2, 0, h_landmark_c[0]*(r_lm_c_2*r_lm_c_2),
+                      0, r_lm_c_2, h_landmark_c[1]*(r_lm_c_2*r_lm_c_2);
+
+      Eigen::Matrix3d J_lc_to_lb;
+      J_lc_to_lb = R_cb;
+
+      // chain rule
+      Eigen::MatrixXd J_residual_to_lb(2,3);
+      J_residual_to_lb = J_residual_to_kp * J_kp_to_lm_c * J_lc_to_lb;
 
 
       // rotation
@@ -129,8 +158,10 @@ class ReprojectionError:
         Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);
         J0.setZero();
 
-        Eigen::Matrix3d J_lb_to_q = T_nb.rotation().transpose() * Skew(landmark_minus_p);
-        J0.block<2,3>(0,1) = J_residual_to_lc * J_lc_to_lb * J_lb_to_q;
+        Eigen::Vector3d landmark_minus_p = h_landmark_n.head<3>() - t_nb;
+
+        Eigen::Matrix3d J_lb_to_q = R_bn * Skew(landmark_minus_p);
+        J0.block<2,3>(0,1) = J_residual_to_lb * J_lb_to_q;
       }  
 
 
@@ -138,8 +169,7 @@ class ReprojectionError:
       if (jacobians[1] != NULL) {
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J1(jacobians[1]);       
 
-        J1 = J_residual_to_lc * J_lc_to_lb * (-1) * rotation.toRotationMatrix().transpose(); 
-
+        J1 = J_residual_to_lb * (-1) * R_bn; 
       }  
 
 
@@ -147,7 +177,7 @@ class ReprojectionError:
       if (jacobians[2] != NULL) {
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J2(jacobians[2]);     
 
-        J2 = J_residual_to_lc * J_lc_to_lb * rotation.toRotationMatrix().transpose();
+        J2 = J_residual_to_lb * R_bn;
       }  
     }
 
@@ -174,9 +204,11 @@ class ReprojectionError:
   measurement_t measurement_; ///< The (2D) measurement.
 
 
-  Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
-  double focal_;
-  double principle_point_[2];
+  Eigen::Matrix4d T_bc_;
+  double fu_;
+  double fv_;
+  double cu_;
+  double cv_;
 };
 
 #endif /* INCLUDE_REPROJECTION_ERROR_H_ */
