@@ -96,6 +96,7 @@ class ReprojectionError:
     Eigen::Vector3d landmark_b = T_nb.inverse() * landmark;
     Eigen::Vector3d landmark_c = T_bc_.inverse() * landmark_b;
 
+    // PinholeCamera.hpp: 209
     residuals[0] = -focal_ * landmark_c(0) / landmark_c(2) + principle_point_[0] - measurement_(0);
     residuals[1] = -focal_ * landmark_c(1) / landmark_c(2) + principle_point_[1] - measurement_(1);
 

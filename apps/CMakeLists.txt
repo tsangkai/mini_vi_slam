@@ -31,6 +31,24 @@ target_link_libraries(backend
   PUBLIC backend_lib
 )
 
+###
+
+add_executable(backend_direct backend_direct.cc)
+
+target_include_directories(backend_direct
+  PUBLIC ${OpenCV_INCLUDE_DIRS}          # not the target style
+  PUBLIC ${EIGEN3_INCLUDE_DIR}
+  PUBLIC ${CERES_INCLUDE_DIRS}     
+  PUBLIC backend_lib
+)
+
+target_link_libraries(backend_direct
+  PUBLIC ${OpenCV_LIBS}
+  PUBLIC ${EIGEN3_LIBS}
+  PUBLIC ceres
+  PUBLIC backend_lib
+)
+
 ### 
 
 add_executable(ground_truth_process ground_truth_process.cc)

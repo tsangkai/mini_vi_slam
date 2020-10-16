@@ -19,7 +19,12 @@ Eigen::Matrix3d Skew(Eigen::Vector3d v) {
 
 
 Eigen::Matrix3d Hat(Eigen::Vector3d v) {
-  return Skew(v);
+  Eigen::Matrix3d m;
+  m <<     0, -v(2),  v(1),
+        v(2),     0, -v(0),
+       -v(1),  v(0),     0;
+
+  return m;
 }
 
 
