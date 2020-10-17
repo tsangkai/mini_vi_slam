@@ -13,7 +13,6 @@
 #include <Eigen/Core>
 
 #include "so3.h"
-#include "landmark_parameter_block.h"
 #include "vec_3d_parameter_block.h"
 #include "quat_parameter_block.h"
 #include "imu_error.h"
@@ -135,7 +134,6 @@ class State {
     rotation_block_ptr_ = new QuatParameterBlock();
     velocity_block_ptr_ = new Vec3dParameterBlock();
     position_block_ptr_ = new Vec3dParameterBlock();
-
   }
 
   ~State() {
@@ -193,17 +191,13 @@ class ExpLandmarkOptSLAM {
 
     cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];            // from camera frame to body frame
 
-    // Eigen::Matrix4d T_BC;
     T_bc_  <<  T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 
                T_BC_node[4],  T_BC_node[5],  T_BC_node[6],  T_BC_node[7], 
                T_BC_node[8],  T_BC_node[9], T_BC_node[10], T_BC_node[11], 
               T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
 
-    //T_bc_ = T_BC;
-
     fu_ = experiment_config_file["cameras"][0]["focal_length"][0];
     fv_ = experiment_config_file["cameras"][0]["focal_length"][1];
-    // focal_length_ = 0.5*focal_length_0 + 0.5*focal_length_1;
 
     cu_ = experiment_config_file["cameras"][0]["principal_point"][0];
     cv_ = experiment_config_file["cameras"][0]["principal_point"][1];
@@ -324,7 +318,7 @@ class ExpLandmarkOptSLAM {
       }
 
 
-      landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0));
+      landmark_parameter_.at(landmark_id) = new Vec3dParameterBlock(Eigen::Vector3d(0, 0, 0));
       // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d() + 0.01 *Eigen::Vector3d::Random());      
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
@@ -641,8 +635,8 @@ class ExpLandmarkOptSLAM {
   double cv_;   // image center v
 
   // parameter containers
-  std::vector<State*>                   state_parameter_;
-  std::vector<LandmarkParameterBlock*>  landmark_parameter_;
+  std::vector<State*>                state_parameter_;
+  std::vector<Vec3dParameterBlock*>  landmark_parameter_;
 
   double accel_bias_parameter_[3];
   double gyro_bias_parameter_[3];

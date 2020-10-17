@@ -1,5 +1,7 @@
 
 // This test file verifies reprojection_error.h
+// modified from TestReprojectionError.h from okvis
+
 #include <cassert>
 #include <cmath>
 #include <iostream>
@@ -7,7 +9,6 @@
 #include <ceres/ceres.h>
 #include <Eigen/Core>
 
-#include "landmark_parameter_block.h"
 #include "vec_3d_parameter_block.h"
 #include "quat_parameter_block.h"
 #include "reprojection_error.h"
@@ -167,7 +168,6 @@ int main(int argc, char **argv) {
   QuatParameterBlock* rotation_block_ptr = new QuatParameterBlock(T_nb.q());
   Vec3dParameterBlock* position_block_ptr = new Vec3dParameterBlock(T_nb.t());
 
-
   optimization_problem.AddParameterBlock(rotation_block_ptr->parameters(), 4);
   optimization_problem.AddParameterBlock(position_block_ptr->parameters(), 3);  
   optimization_problem.SetParameterBlockVariable(rotation_block_ptr->parameters()); // optimize this...
@@ -195,7 +195,7 @@ int main(int argc, char **argv) {
     Eigen::Vector4d h_landmark_n = T_nb.T() *T_bc.T() * h_landmark_c;
     Eigen::Vector3d landmark = h_landmark_n.head<3>();
 
-    LandmarkParameterBlock* landmark_ptr = new LandmarkParameterBlock(landmark);
+    Vec3dParameterBlock* landmark_ptr = new Vec3dParameterBlock(landmark);
     optimization_problem.AddParameterBlock(landmark_ptr->parameters(), 3);
     optimization_problem.SetParameterBlockConstant(landmark_ptr->parameters());
 
@@ -228,9 +228,15 @@ int main(int argc, char **argv) {
   ceres::Solve(optimization_options, &optimization_problem, &optimization_summary);
   std::cout << optimization_summary.FullReport() << "\n";
 
-  std::cout << "initial T_WS : " << "\n" << T_nb_init.T() << "\n"
-            << "optimized T_WS : " << "\n" << Transformation(rotation_block_ptr->estimate(), position_block_ptr->estimate()).T() << "\n"
-            << "correct T_WS : " << "\n" << T_nb.T() << "\n";
+  std::cout << "initial T_nb : " << "\n" << T_nb_init.T() << "\n"
+            << "optimized T_nb : " << "\n" << Transformation(rotation_block_ptr->estimate(), position_block_ptr->estimate()).T() << "\n"
+            << "correct T_nb : " << "\n" << T_nb.T() << "\n";
+
+  std::cout << "rotation difference of the initial T_nb : " << 2*(T_nb.q() * T_nb_init.q().inverse()).vec().norm() << "\n";
+  std::cout << "rotation difference of the optimized T_nb : " << 2*(T_nb.q() * rotation_block_ptr->estimate().inverse()).vec().norm() << "\n";
+
+  std::cout << "translation difference of the initial T_nb : " << (T_nb.t() - T_nb_init.t()).norm() << "\n";
+  std::cout << "translation difference of the optimized T_nb : " << (T_nb.t() - position_block_ptr->estimate()).norm() << "\n";
 
   // make sure it converged
   assert(("quaternions not close enough", 2*(T_nb.q() * rotation_block_ptr->estimate().inverse()).vec().norm() < 1e-2));

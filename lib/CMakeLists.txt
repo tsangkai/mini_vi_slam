@@ -2,7 +2,6 @@ add_library(backend_lib STATIC
   so3.h
   parameter_block.h
   sized_parameter_block.h
-  landmark_parameter_block.h
   vec_3d_parameter_block.h
   quat_parameter_block.h
   imu_error.h
