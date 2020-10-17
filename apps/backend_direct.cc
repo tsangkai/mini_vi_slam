@@ -13,7 +13,6 @@
 #include <Eigen/Core>
 
 #include "so3.h"
-#include "landmark_parameter_block.h"
 #include "vec_3d_parameter_block.h"
 #include "quat_parameter_block.h"
 #include "imu_error.h"
@@ -172,6 +171,8 @@ class ExpLandmarkOptSLAM {
 
   ExpLandmarkOptSLAM(std::string config_folder_path) {
     ReadConfigurationFiles(config_folder_path);
+
+    quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
   }
 
   bool ReadConfigurationFiles(std::string config_folder_path) {
@@ -251,7 +252,7 @@ class ExpLandmarkOptSLAM {
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
           state_parameter_.at(0)->GetRotationBlock()->setEstimate(initial_rotation);
-          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4, new ceres::QuaternionParameterization());
+          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4, quat_parameterization_ptr_);
 
           // velocity
           std::string initial_velocity_str[3];
@@ -373,7 +374,7 @@ class ExpLandmarkOptSLAM {
 
           state_parameter_.push_back(new State(imu_data.GetTimestamp()));
 
-          optimization_problem_.AddParameterBlock(state_parameter_.back()->GetRotationBlock()->parameters(), 4, new ceres::QuaternionParameterization());
+          optimization_problem_.AddParameterBlock(state_parameter_.back()->GetRotationBlock()->parameters(), 4, quat_parameterization_ptr_);
         }
       }
     }
@@ -467,8 +468,8 @@ class ExpLandmarkOptSLAM {
         landmark_parameter_.resize(landmark_id+1);
       }
 
-      landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d(0, 0, 0));
-      // landmark_parameter_.at(landmark_id) = new LandmarkParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());
+      landmark_parameter_.at(landmark_id) = new Vec3dParameterBlock(Eigen::Vector3d(0, 0, 0));
+      // landmark_parameter_.at(landmark_id) = new Vec3dParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
                                                                  T_bc_,
@@ -526,7 +527,7 @@ class ExpLandmarkOptSLAM {
 
 
     for (size_t i=1; i<state_parameter_.size(); ++i) {
-      // optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
+      optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
       optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetVelocityBlock()->parameters());
       optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetPositionBlock()->parameters());
     }
@@ -589,13 +590,15 @@ class ExpLandmarkOptSLAM {
   double cv_;   // image center v
 
   // parameter containers
-  std::vector<State*>                   state_parameter_;
-  std::vector<LandmarkParameterBlock*>  landmark_parameter_;
+  std::vector<State*>                state_parameter_;
+  std::vector<Vec3dParameterBlock*>  landmark_parameter_;
 
   double accel_bias_parameter_[3];
   double gyro_bias_parameter_[3];
 
   // ceres parameter
+  ceres::LocalParameterization* quat_parameterization_ptr_;
+
   ceres::Problem optimization_problem_;
   ceres::Solver::Options optimization_options_;
   ceres::Solver::Summary optimization_summary_;
