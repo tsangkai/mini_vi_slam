@@ -173,6 +173,8 @@ class ExpLandmarkOptSLAM {
 
   ExpLandmarkOptSLAM(std::string config_folder_path) {
     ReadConfigurationFiles(config_folder_path);
+
+    quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
   }
 
   bool ReadConfigurationFiles(std::string config_folder_path) {
@@ -248,7 +250,7 @@ class ExpLandmarkOptSLAM {
 
           Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
           state_parameter_.at(0)->GetRotationBlock()->setEstimate(initial_rotation);
-          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4, new ceres::QuaternionParameterization());
+          optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4, quat_parameterization_ptr_);
 
           // velocity
           std::string initial_velocity_str[3];
@@ -305,7 +307,7 @@ class ExpLandmarkOptSLAM {
       if (state_parameter_.back()->GetTimestamp() < observation_data.GetTimestamp()) {
           state_parameter_.push_back(new State(observation_data.GetTimestamp()));
 
-          optimization_problem_.AddParameterBlock(state_parameter_.back()->GetRotationBlock()->parameters(), 4, new ceres::QuaternionParameterization());
+          optimization_problem_.AddParameterBlock(state_parameter_.back()->GetRotationBlock()->parameters(), 4, quat_parameterization_ptr_);
       }
       else if (state_parameter_.back()->GetTimestamp() == observation_data.GetTimestamp()) {
       }
@@ -642,6 +644,8 @@ class ExpLandmarkOptSLAM {
   double gyro_bias_parameter_[3];
 
   // ceres parameter
+  ceres::LocalParameterization* quat_parameterization_ptr_;
+
   ceres::Problem optimization_problem_;
   ceres::Solver::Options optimization_options_;
   ceres::Solver::Summary optimization_summary_;

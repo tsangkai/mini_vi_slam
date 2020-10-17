@@ -150,6 +150,7 @@ int main(int argc, char **argv) {
 
   // Build the problem.
   ceres::Problem optimization_problem;
+  ceres::LocalParameterization* quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
 
   // set up a random geometry
   std::cout << "set up a random geometry... " << std::flush;
@@ -158,7 +159,7 @@ int main(int argc, char **argv) {
   T_nb.SetRandom(10.0, M_PI);
 
   Transformation T_disturb;
-  T_disturb.SetRandom(1, 0.01);
+  T_disturb.SetRandom(1, 0.1);
 
   Transformation T_nb_init = T_nb * T_disturb; // navigation to body
 
@@ -168,16 +169,11 @@ int main(int argc, char **argv) {
   QuatParameterBlock* rotation_block_ptr = new QuatParameterBlock(T_nb.q());
   Vec3dParameterBlock* position_block_ptr = new Vec3dParameterBlock(T_nb.t());
 
-  optimization_problem.AddParameterBlock(rotation_block_ptr->parameters(), 4);
+  optimization_problem.AddParameterBlock(rotation_block_ptr->parameters(), 4, quat_parameterization_ptr_);
   optimization_problem.AddParameterBlock(position_block_ptr->parameters(), 3);  
   optimization_problem.SetParameterBlockVariable(rotation_block_ptr->parameters()); // optimize this...
   optimization_problem.SetParameterBlockVariable(position_block_ptr->parameters());
   std::cout << " [ OK ] " << std::endl;
-
-
-  std::cout << "setting local parameterization for rotation... " << std::flush;
-  optimization_problem.SetParameterization(rotation_block_ptr->parameters(), new ceres::QuaternionParameterization());
-  std::cout<<" [ OK ] " << std::endl;
 
 
   // get some random points and build error terms
