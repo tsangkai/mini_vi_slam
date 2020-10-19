@@ -132,21 +132,21 @@ class Transformation {
   }
 
  protected:
-  Eigen::Vector3d t_;     ///< Translation {_A}r_{B}.
-  Eigen::Quaterniond q_;  ///< Quaternion q_{AB}.
+  Eigen::Vector3d t_;             ///< Translation {_A}r_{B}.
+  Eigen::Quaterniond q_;          ///< Quaternion q_{AB}.
 };
 
 
 int main(int argc, char **argv) {
-  srand(time(0));
+  srand((unsigned int) time(0));
 
   google::InitGoogleLogging(argv[0]);
 
-  double du = 752.0;          // image dimension
+  double du = 752.0;              // image dimension
   double dv = 480.0;
-  double fu = 458.654880721;  // focal length
+  double fu = 458.654880721;      // focal length
   double fv = 457.296696463;
-  double cu = 367.215803962;  // principal point
+  double cu = 367.215803962;      // principal point
   double cv = 248.375340610;
   double noise_deviation = 3.0;
 
