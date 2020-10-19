@@ -94,6 +94,7 @@ class Transformation {
                  double rotationMaxRadians) {
     // Create a random unit-length axis.
     Eigen::Vector3d axis = rotationMaxRadians * Eigen::Vector3d::Random();
+
     // Create a random rotation angle in radians.
     Eigen::Vector3d t = translationMaxMeters * Eigen::Vector3d::Random();
     t_ = t;
@@ -136,6 +137,7 @@ class Transformation {
 
 
 int main(int argc, char **argv) {
+  srand(time(0));
 
   google::InitGoogleLogging(argv[0]);
 
