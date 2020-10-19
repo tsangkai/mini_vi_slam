@@ -1,6 +1,11 @@
 
 // This test file verifies reprojection_error.h
 // modified from TestReprojectionError.h from okvis
+// 
+// Summary
+// In this test file, the orientation and the positin of the agent are disturbed by noise.
+// Given camera projected points from N=100 3d landmark, this test file uses reprojection_error
+// to recover the real orientation and position.
 
 #include <cassert>
 #include <cmath>
@@ -58,22 +63,18 @@ Eigen::Vector3d CreateRandomVisiblePoint(double du, double dv,
   // Uniform random sample in image coordinates.
   // Add safety boundary for later inaccurate backprojection
 
-  Eigen::Vector2d outPoint = Eigen::Vector2d::Random();
-  outPoint += Eigen::Vector2d::Ones();
-  outPoint *= 0.5;   // unif [0,1]
-
-  outPoint[0] *= du;
-  outPoint[1] *= dv;
-
+  double boundary = 0.02;
+  Eigen::Vector2d outPoint;
+  outPoint[0] = Eigen::internal::random(boundary, du-boundary);
+  outPoint[1] = Eigen::internal::random(boundary, dv-boundary);
 
   Eigen::Vector3d ray = BackProject(outPoint, fu, fv, cu, cv);
   ray.normalize();
-  Eigen::Vector2d depth = Eigen::Vector2d::Random();
-  Eigen::Vector3d point_c = (0.5 * (max_dist - min_dist) * (depth[0] + 1.0) + min_dist) * ray;    // rescale and offset
+  double depth = Eigen::internal::random(min_dist, max_dist);
+  Eigen::Vector3d point_c = depth * ray;    // rescale and offset
 
   return ray;
 }
-
 
 
 class Transformation {
@@ -239,7 +240,6 @@ int main(int argc, char **argv) {
   // make sure it converged
   assert(("quaternions not close enough", 2*(T_nb.q() * rotation_block_ptr->estimate().inverse()).vec().norm() < 1e-2));
   assert(("translation not close enough", (T_nb.t() - position_block_ptr->estimate()).norm() < 1e-1));
-
 
   return 0;
 }
