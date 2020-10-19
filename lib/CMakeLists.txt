@@ -14,6 +14,6 @@ target_include_directories(backend_lib
 )
 
 target_link_libraries(backend_lib
-  PRIVATE PUBLIC ${EIGEN3_LIBS}
+  PRIVATE ${EIGEN3_LIBS}
   PRIVATE ceres  
 )

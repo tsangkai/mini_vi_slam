@@ -1,7 +1,11 @@
 
+
 ###
 
-add_executable(reprojection_error_test reprojection_error_test.cc)
+add_executable(reprojection_error_test 
+  reprojection_error_test.cc
+  transformation.h
+)
 
 target_include_directories(reprojection_error_test
   PUBLIC ${CERES_INCLUDE_DIRS}     
