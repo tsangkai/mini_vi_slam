@@ -186,14 +186,12 @@ class ReprojectionError:
 
   // sizes
   /// \brief Residual dimension.
-  size_t residualDim() const
-  {
+  size_t residualDim() const {
     return kNumResiduals;
   }
 
   /// @brief Residual block type as string
-  std::string typeInfo() const
-  {
+  std::string typeInfo() const {
     return "ReprojectionError";
   }
 
