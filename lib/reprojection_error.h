@@ -41,7 +41,8 @@ class ReprojectionError:
   ReprojectionError(const measurement_t & measurement, 
                     Eigen::Matrix4d T_bc,
                     double fu, double fv, 
-                    double cu, double cv) {
+                    double cu, double cv,
+                    const Eigen::Matrix2d & covariance = Eigen::Matrix2d::Identity()) {
     setMeasurement(measurement);
 
     T_bc_ = T_bc;
@@ -49,6 +50,8 @@ class ReprojectionError:
     fv_ = fv;
     cu_ = cu;
     cv_ = cv;
+
+    covariance_ = covariance;
   }
 
   /// \brief Trivial destructor.
@@ -110,10 +113,18 @@ class ReprojectionError:
     keypoint[1] = h_landmark_c[1] / h_landmark_c[2];
 
     // PinholeCamera.hpp: 209
-    residuals[0] = fu_ * keypoint[0] + cu_ - measurement_[0];
-    residuals[1] = fv_ * keypoint[0] + cv_ - measurement_[1];
+    measurement_t error;
+    error[0] = fu_ * keypoint[0] + cu_ - measurement_[0];
+    error[1] = fv_ * keypoint[0] + cv_ - measurement_[1];
 
+    // covariance
+    Eigen::LLT<Eigen::Matrix2d> lltOfInformation(covariance_.inverse());
+    Eigen::Matrix2d squareRootInformation_ = lltOfInformation.matrixL().transpose();
 
+    measurement_t weighted_error = squareRootInformation_ * error;
+
+    residuals[0] = weighted_error[0];
+    residuals[1] = weighted_error[1];
 
     /*********************************************************************************
 
@@ -149,7 +160,7 @@ class ReprojectionError:
         Eigen::Vector3d landmark_minus_p = h_landmark_n.head<3>() - t_nb;
 
         Eigen::Matrix3d J_lb_to_q = R_bn * Skew(landmark_minus_p);
-        J0.block<2,3>(0,1) = J_residual_to_lb * J_lb_to_q;
+        J0.block<2,3>(0,1) = squareRootInformation_ * J_residual_to_lb * J_lb_to_q;
       }  
 
 
@@ -157,7 +168,7 @@ class ReprojectionError:
       if (jacobians[1] != NULL) {
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J1(jacobians[1]);       
 
-        J1 = J_residual_to_lb * (-1) * R_bn; 
+        J1 = squareRootInformation_ * J_residual_to_lb * (-1) * R_bn; 
       }  
 
 
@@ -165,7 +176,7 @@ class ReprojectionError:
       if (jacobians[2] != NULL) {
         Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > J2(jacobians[2]);     
 
-        J2 = J_residual_to_lb * R_bn;
+        J2 = squareRootInformation_ * J_residual_to_lb * R_bn;
       }  
     }
 
@@ -197,6 +208,7 @@ class ReprojectionError:
   double fv_;
   double cu_;
   double cv_;
+  Eigen::Matrix2d covariance_;
 };
 
 #endif /* INCLUDE_REPROJECTION_ERROR_H_ */

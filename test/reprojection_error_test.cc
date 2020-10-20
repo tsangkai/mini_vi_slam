@@ -37,6 +37,7 @@ Eigen::Vector2d Project(Eigen::Vector3d v, double fu, double fv, double cu, doub
   return v_ret;
 }
 
+
 Eigen::Vector3d BackProject(Eigen::Vector2d v, double fu, double fv, double cu, double cv) {
   // unscale and center
   Eigen::Vector2d imagePoint2;
@@ -109,7 +110,7 @@ int main(int argc, char **argv) {
   Transformation T_bc;                         // body to camera
   T_bc.SetRandom(0.2, M_PI);
 
-  QuatParameterBlock* rotation_block_ptr = new QuatParameterBlock(T_nb.q());
+  QuatParameterBlock*  rotation_block_ptr = new QuatParameterBlock(T_nb.q());
   Vec3dParameterBlock* position_block_ptr = new Vec3dParameterBlock(T_nb.t());
 
   optimization_problem.AddParameterBlock(rotation_block_ptr->parameters(), 4, quat_parameterization_ptr_);
