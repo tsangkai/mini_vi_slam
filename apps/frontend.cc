@@ -278,7 +278,7 @@ class Frontend {
 
     std::ofstream output_file;
     output_file.open(output_file_str);
-    output_file << "timestamp [ns], landmark id, u [pixel], v [pixel]\n";
+    output_file << "timestamp [ns], landmark id, u [pixel], v [pixel], size\n";
   
     
     size_t num_of_images = image_data_.size();
@@ -291,7 +291,8 @@ class Frontend {
           std::string output_str = image_data_.at(i).GetTimestamp() + "," 
                                    + std::to_string(landmark_id_table_.at(i).at(k)->GetLandmarkId()) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
-                                   + std::to_string(image_keypoints_.at(i).at(k).pt.y) + "\n";
+                                   + std::to_string(image_keypoints_.at(i).at(k).pt.y) + ","
+                                   + std::to_string(image_keypoints_.at(i).at(k).size) + "\n";
           output_file << output_str;
         }
       }

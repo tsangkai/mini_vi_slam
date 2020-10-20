@@ -47,7 +47,19 @@ class Transformation {
     return q_;
   }
 
-  // operator*
+  Eigen::Matrix3d C() {
+    return q_.toRotationMatrix();
+  }
+
+  Transformation inverse() {
+
+    Eigen::Quaterniond q_inv = q_.conjugate();
+    Eigen::Vector3d t_inv = (-1) * q_inv.toRotationMatrix() * t_;
+
+    return Transformation(q_inv, t_inv);
+  }
+
+    // operator*
   Transformation operator*(const Transformation & rhs) const {
     return Transformation(q_ * rhs.q_, q_.toRotationMatrix() * rhs.t_ + t_);
   }

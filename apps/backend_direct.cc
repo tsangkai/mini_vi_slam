@@ -598,7 +598,6 @@ class ExpLandmarkOptSLAM {
 
   // ceres parameter
   ceres::LocalParameterization* quat_parameterization_ptr_;
-
   ceres::Problem optimization_problem_;
   ceres::Solver::Options optimization_options_;
   ceres::Solver::Summary optimization_summary_;
