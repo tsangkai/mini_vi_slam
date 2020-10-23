@@ -8,6 +8,23 @@
 #include <cmath>
 
 
+double sinc(double x){
+  if(fabs(x)>1e-10) {
+    return sin(x)/x;
+  }
+  else {
+    static const double c_2=1.0/6.0;
+    static const double c_4=1.0/120.0;
+    static const double c_6=1.0/5040.0;
+    const double x_2 = x*x;
+    const double x_4 = x_2*x_2;
+    const double x_6 = x_2*x_2*x_2;
+    
+    return 1.0 - c_2*x_2 + c_4*x_4 - c_6*x_6;
+  }
+}
+
+
 Eigen::Matrix3d Skew(Eigen::Vector3d v) {
   Eigen::Matrix3d m;
   m <<     0, -v(2),  v(1),
@@ -36,15 +53,28 @@ Eigen::Matrix3d Exp(Eigen::Vector3d omega) {
 }
 
 
-Eigen::Vector3d Log_q(Eigen::Quaterniond q) {
+Eigen::Quaterniond Exp_q(const Eigen::Vector3d v) {
+  Eigen::Quaterniond q;
+
+  const double v_half_norm = 0.5 * v.norm();
+  const double sinc_v_half_norm = sinc(v_half_norm);
+  const double cos_v_half_norm = cos(v_half_norm);
+
+  q.w() = cos_v_half_norm;  
+  q.vec() = 0.5 * sinc_v_half_norm * v;
+
+  return q;
+}
+
+Eigen::Vector3d Log_q(const Eigen::Quaterniond q) {
 
   double a = acos(q.w() / q.norm());
 
   if (abs(a) < 1e-10) {
-    return q.vec();
+    return 2 * q.vec();
   }
 
-  return (a / sin(a)) * q.vec();
+  return 2*(a / sin(a)) * q.vec();
 }
 
 

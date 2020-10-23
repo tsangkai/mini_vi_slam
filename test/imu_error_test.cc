@@ -15,21 +15,6 @@
 
 #define _USE_MATH_DEFINES
 
-double sinc_test(double x){
-  if(fabs(x)>1e-10) {
-    return sin(x)/x;
-  }
-  else {
-    static const double c_2=1.0/6.0;
-    static const double c_4=1.0/120.0;
-    static const double c_6=1.0/5040.0;
-    const double x_2 = x*x;
-    const double x_4 = x_2*x_2;
-    const double x_6 = x_2*x_2*x_2;
-    
-    return 1.0 - c_2*x_2 + c_4*x_4 - c_6*x_6;
-  }
-}
 
 struct ImuParameters{
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -171,16 +156,8 @@ int main(int argc, char **argv) {
                       m_a_W_y*sin(w_a_W_y*time+p_a_W_y),
                       m_a_W_z*sin(w_a_W_z*time+p_a_W_z));
 
+  Eigen::Quaterniond dq = Exp_q(omega_S*dt);
 
-
-  Eigen::Quaterniond dq;
-
-  // propagate orientation
-  const double theta_half = omega_S.norm()*dt*0.5;
-  const double sinc_theta_half = sinc_test(theta_half);
-  const double cos_theta_half = cos(theta_half);
-  dq.vec() = sinc_theta_half*0.5*dt*omega_S;
-  dq.w() = cos_theta_half;
   rotation = rotation * dq;
 
   // propagate position
@@ -252,6 +229,8 @@ int main(int argc, char **argv) {
   ceres::CostFunction* cost_function = new ImuError(imu_data.gyro_,
                                                     imu_data.accel_,
                                                     dt,
+                                                    Eigen::Vector3d(0,0,0),
+                                                    Eigen::Vector3d(0,0,0),                   
                                                     imuParameters.sigma_g_c,
                                                     imuParameters.sigma_a_c);
 

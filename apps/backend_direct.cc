@@ -392,9 +392,14 @@ class ExpLandmarkOptSLAM {
       Eigen::Vector3d gyro_measurement = imu_data_vec.at(i).GetGyroMeasurement();      
       Eigen::Vector3d accel_plus_gravity = rotation_t.toRotationMatrix()*(accel_measurement - accel_bias) + gravity;
       
+      /***
       Eigen::Quaterniond rotation_t1 = rotation_t * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 
                                                                           0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 
                                                                           0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
+      ***/
+
+      Eigen::Quaterniond rotation_t1 = rotation_t * Exp_q(time_diff*(gyro_measurement-gyro_bias));
+
       Eigen::Vector3d velocity_t1 = velocity_t + time_diff*accel_plus_gravity;
       Eigen::Vector3d position_t1 = position_t + time_diff*velocity_t + (0.5*time_diff*time_diff)*accel_plus_gravity;
 
@@ -409,7 +414,9 @@ class ExpLandmarkOptSLAM {
       // add constraints
       ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).GetGyroMeasurement(),
                                                         imu_data_vec.at(i).GetAccelMeasurement(),
-                                                        time_diff);
+                                                        time_diff,
+                                                        Eigen::Vector3d(-0.003196, 0.021298, 0.078430),
+                                                        Eigen::Vector3d(-0.026176, 0.137568, 0.076295));
 
 
       optimization_problem_.AddResidualBlock(cost_function,
