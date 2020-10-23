@@ -157,11 +157,9 @@ class ReprojectionError:
         Eigen::Map<Eigen::Matrix<double, 2, 4, Eigen::RowMajor> > J0(jacobians[0]);
 
         Eigen::Vector3d landmark_minus_p = h_landmark_n.head<3>() - t_nb;
-        Eigen::Matrix<double, 3, 4, Eigen::RowMajor> J_lift;
-        LiftJacobian(q_nb, J_lift.data());
         Eigen::Matrix3d J_lb_to_dq = (-1)* Skew(R_bn *landmark_minus_p);    // [Bloesch, et. al, 2016] (27)
         
-        J0 = squareRootInformation_ * J_residual_to_lb * J_lb_to_dq * J_lift;
+        J0 = squareRootInformation_ * J_residual_to_lb * J_lb_to_dq * QuatLiftJacobian(q_nb);
       }  
 
 

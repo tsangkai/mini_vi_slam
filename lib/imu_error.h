@@ -71,10 +71,15 @@ class ImuError :
   /// 
   ImuError(const Eigen::Vector3d gyro_measurement,
            const Eigen::Vector3d accel_measurement,
-           const double dt) {
+           const double dt,
+           const double sigma_g_c = 12.0e-4,    // gyro noise density [rad/s/sqrt(Hz)]
+           const double sigma_a_c = 8.0e-3) {   // accelerometer noise density [m/s^2/sqrt(Hz)]
     gyro_measurement_ = gyro_measurement;
     accel_measurement_ = accel_measurement;
     dt_ = dt;
+
+    sigma_g_c_ = sigma_g_c;
+    sigma_a_c_ = sigma_a_c;
   }
 
 
@@ -93,6 +98,10 @@ class ImuError :
   bool Evaluate(double const* const * parameters, 
                 double* residuals,
                 double** jacobians) const {
+    
+    Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
+    Eigen::Vector3d gyro_bias = Eigen::Vector3d(0, 0, 0); //Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
+    Eigen::Vector3d accel_bias = Eigen::Vector3d(0, 0, 0); //(-0.026176, 0.137568, 0.076295);
 
     Eigen::Quaterniond _rotation_t1(parameters[0][0], parameters[0][1], parameters[0][2], parameters[0][3]);
     Eigen::Vector3d _velocity_t1(parameters[1]);
@@ -100,10 +109,6 @@ class ImuError :
     Eigen::Quaterniond _rotation_t(parameters[3][0], parameters[3][1], parameters[3][2], parameters[3][3]);
     Eigen::Vector3d _velocity_t(parameters[4]);
     Eigen::Vector3d _position_t(parameters[5]);
-
-    Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
-    Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
-    Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
 
     // residual vectors
     Eigen::Map<Eigen::Vector3d > r_rotation(residuals+0);      
@@ -114,16 +119,29 @@ class ImuError :
     Eigen::Vector3d v_diff = dt_* _accel_plus_gravity;
     Eigen::Vector3d p_diff = dt_*_velocity_t + (dt_*dt_*0.5)* _accel_plus_gravity;
 
-    r_rotation = Log_q((_rotation_t * Eigen::Quaterniond(1, 0.5*dt_*(gyro_measurement_(0)-gyro_bias(0)), 
-                                                           0.5*dt_*(gyro_measurement_(1)-gyro_bias(1)), 
-                                                           0.5*dt_*(gyro_measurement_(2)-gyro_bias(2)))).conjugate() * _rotation_t1);
+    Eigen::Quaterniond d_q(1, 0.5*dt_*(gyro_measurement_(0)-gyro_bias(0)),
+                              0.5*dt_*(gyro_measurement_(1)-gyro_bias(1)),
+                              0.5*dt_*(gyro_measurement_(2)-gyro_bias(2)));
+
+    r_rotation = -(2/dt_) * Log_q((_rotation_t * d_q).conjugate() * _rotation_t1);
 
 
 
     r_velocity = _velocity_t1 - ( _velocity_t + v_diff);
     r_position = _position_t1 - ( _position_t + p_diff);
 
-    
+
+    // covariance adjustment
+    double gyr_input_sigma = sigma_g_c_ / sqrt(dt_);
+    double acc_input_sigma = sigma_a_c_ / sqrt(dt_);
+
+    double q_noise_sigma = dt_ * gyr_input_sigma;
+    double v_noise_sigma = dt_ * acc_input_sigma;
+    double p_noise_sigma = 0.5 * dt_ * dt_ * acc_input_sigma;
+
+    r_rotation = (1.0 / q_noise_sigma) * r_rotation;
+    r_velocity = (1.0 / v_noise_sigma) * r_velocity;
+    r_position = (1.0 / p_noise_sigma) * r_position;
 
 
     /*********************************************************************************
@@ -132,6 +150,25 @@ class ImuError :
 
     *********************************************************************************/
 
+    Eigen::MatrixXd p_log_q_2_q(3,4);
+    p_log_q_2_q << 0, 1, 0, 0,
+                   0, 0, 1, 0,
+                   0, 0, 0, 1;
+
+    Eigen::MatrixXd p_exp_q_2_q(4,3);
+    p_exp_q_2_q << 0, 0, 0,
+                   1, 0, 0,
+                   0, 1, 0,
+                   0, 0, 1;
+
+    Eigen::MatrixXd p_exp_c_q_2_exp_q(4,4);
+    p_exp_c_q_2_exp_q << 1,  0,  0,  0,
+                         0, -1,  0,  0,
+                         0,  0, -1,  0,
+                         0,  0,  0, -1;
+
+
+
     if (jacobians != NULL) {
 
       // rotation_t1
@@ -139,7 +176,11 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t1(jacobians[0]);      
         J_q_t1.setZero();
 
-
+        // TODO
+        Eigen::Quaterniond q_t_inv_q_t1 = _rotation_t.conjugate() * _rotation_t1;
+        Eigen::Matrix<double, 3, 3> J_res_2_dq_t1 = (-2/dt_) * RightJacobianInv(Log_q(q_t_inv_q_t1)) * _rotation_t.conjugate().toRotationMatrix();
+      
+        J_q_t1.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_2_dq_t1 * QuatLiftJacobian(_rotation_t1);
       }  
 
       // velocity_t1
@@ -147,7 +188,7 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_v_t1(jacobians[1]);      
         J_v_t1.setZero();
 
-        J_v_t1.block<3,3>(3,0) = Eigen::Matrix3d::Identity();
+        J_v_t1.block<3,3>(3,0) = (1/v_noise_sigma) * Eigen::Matrix3d::Identity();
       }
 
       // position_t1
@@ -155,7 +196,7 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_p_t1(jacobians[2]);      
         J_p_t1.setZero();
 
-        J_p_t1.block<3,3>(6,0) = Eigen::Matrix3d::Identity();
+        J_p_t1.block<3,3>(6,0) = (1/p_noise_sigma) * Eigen::Matrix3d::Identity();
       }
 
 
@@ -164,8 +205,14 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t(jacobians[3]);      
         J_q_t.setZero();
 
-        J_q_t.block<3,3>(3,0) = (dt_) * Skew(_rotation_t.toRotationMatrix() * v_diff);
-        J_q_t.block<3,3>(6,0) = (0.5*dt_*dt_) * Skew(_rotation_t.toRotationMatrix() * p_diff);
+        // TODO
+        Eigen::Quaterniond q_t_inv_q_t1 = _rotation_t.conjugate() * _rotation_t1;
+        Eigen::Matrix<double, 3, 3> J_res_2_dq_t = (-2/dt_) * RightJacobianInv(Log_q(q_t_inv_q_t1)) * (-1) * _rotation_t.toRotationMatrix().transpose();
+      
+        J_q_t.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_2_dq_t * QuatLiftJacobian(_rotation_t);
+
+        J_q_t.block<3,3>(3,0) = (1/v_noise_sigma) * (dt_) * Skew(_rotation_t.toRotationMatrix() * v_diff);
+        J_q_t.block<3,3>(6,0) = (1/p_noise_sigma) * (0.5*dt_*dt_) * Skew(_rotation_t.toRotationMatrix() * p_diff);
       }  
 
       // velocity_t
@@ -173,8 +220,8 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_v_t(jacobians[4]);      
         J_v_t.setZero();
 
-        J_v_t.block<3,3>(3,0) = (-1) * Eigen::Matrix3d::Identity();
-        J_v_t.block<3,3>(6,0) = (-dt_) * Eigen::Matrix3d::Identity();
+        J_v_t.block<3,3>(3,0) = (1/v_noise_sigma) * (-1) * Eigen::Matrix3d::Identity();
+        J_v_t.block<3,3>(6,0) = (1/p_noise_sigma) * (-dt_) * Eigen::Matrix3d::Identity();
       }  
 
       // position_t
@@ -182,7 +229,7 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_p_t(jacobians[5]);      
         J_p_t.setZero();
 
-        J_p_t.block<3,3>(6,0) = (-1) * Eigen::Matrix3d::Identity();
+        J_p_t.block<3,3>(6,0) = (1/p_noise_sigma) * (-1) * Eigen::Matrix3d::Identity();
       }  
     }
 
@@ -221,6 +268,9 @@ class ImuError :
 
   // times
   double dt_;
+
+  double sigma_g_c_;    // gyro noise density [rad/s/sqrt(Hz)]
+  double sigma_a_c_;    // accelerometer noise density [m/s^2/sqrt(Hz)]
 
 };
 

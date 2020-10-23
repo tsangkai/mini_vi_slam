@@ -40,7 +40,7 @@ Eigen::Vector3d Log_q(Eigen::Quaterniond q) {
 
   double a = acos(q.w() / q.norm());
 
-  if (abs(a) < 1e-8) {
+  if (abs(a) < 1e-10) {
     return q.vec();
   }
 
@@ -48,9 +48,19 @@ Eigen::Vector3d Log_q(Eigen::Quaterniond q) {
 }
 
 
+// plus() in okvis
+Eigen::Matrix4d QuatLeftMul(const Eigen::Quaterniond & q) {       
+  Eigen::Matrix4d Q;
+  Q(0,0) = q.w(); Q(0,1) = -q.x(); Q(0,2) = -q.y(); Q(0,3) = -q.z();
+  Q(1,0) = q.x(); Q(1,1) = -q.w(); Q(1,2) = -q.z(); Q(1,3) =  q.y();
+  Q(2,0) = q.y(); Q(2,1) =  q.z(); Q(2,2) = -q.w(); Q(2,3) = -q.x();
+  Q(3,0) = q.z(); Q(3,1) = -q.y(); Q(3,2) =  q.x(); Q(3,3) = -q.w();
+  return Q;
+}
+
+
 // oplus() in okvis
-Eigen::Matrix4d QuatRightMul(const Eigen::Quaterniond & q_BC) {       
-  Eigen::Vector4d q = q_BC.coeffs();
+Eigen::Matrix4d QuatRightMul(const Eigen::Quaterniond & q) {       
   Eigen::Matrix4d Q;
   Q(0,0) = q.w(); Q(0,1) = -q.x(); Q(0,2) = -q.y(); Q(0,3) = -q.z();
   Q(1,0) = q.x(); Q(1,1) =  q.w(); Q(1,2) =  q.z(); Q(1,3) = -q.y();
@@ -60,10 +70,12 @@ Eigen::Matrix4d QuatRightMul(const Eigen::Quaterniond & q_BC) {
 }
 
 
+// directly from okvis
 // Computes the Jacobian from minimal space to naively overparameterised space as used by ceres.
-bool LiftJacobian(const Eigen::Quaterniond & q, double* jacobian) {
+Eigen::Matrix<double, 3, 4> QuatLiftJacobian(const Eigen::Quaterniond & q) {
 
-  Eigen::Map<Eigen::Matrix<double, 3, 4, Eigen::RowMajor> > J_lift(jacobian);
+  Eigen::Matrix<double, 3, 4> J_lift;
+
   const Eigen::Quaterniond q_inv = q.conjugate();
   Eigen::Matrix4d q_inv_right_mul = QuatRightMul(q_inv);
 
@@ -73,8 +85,39 @@ bool LiftJacobian(const Eigen::Quaterniond & q, double* jacobian) {
 
   J_lift = Jq_pinv * q_inv_right_mul;
 
-  return true;
+  return J_lift;
 }
 
+
+Eigen::Matrix3d RightJacobian(const Eigen::Vector3d & v) {
+
+  Eigen::Matrix3d right_jacobian;
+
+  const double v_norm = v.norm();
+  const double v_norm_2 = v_norm*v_norm;
+  const double v_norm_3 = v_norm_2*v_norm;
+  const Eigen::Matrix3d skewed_v = Skew(v);
+
+  assert(("norm is too small", v_norm > 1e-10));
+
+  right_jacobian = Eigen::Matrix3d::Identity() - ((1-cos(v_norm))/v_norm_2) * skewed_v + ((v_norm-sin(v_norm))/v_norm_3) * skewed_v * skewed_v;
+
+  return right_jacobian;
+}
+
+Eigen::Matrix3d RightJacobianInv(const Eigen::Vector3d & v) {
+
+  Eigen::Matrix3d right_jacobian_inv;
+
+  const double v_norm = v.norm();
+  const double v_norm_2 = v_norm*v_norm;
+  const Eigen::Matrix3d skewed_v = Skew(v);
+
+  assert(("norm is too small", v_norm > 1e-10));
+
+  right_jacobian_inv = Eigen::Matrix3d::Identity() + 0.5 * skewed_v + (1/v_norm_2  - (1+cos(v_norm))/(2*v_norm*sin(v_norm))) * skewed_v * skewed_v;
+
+  return right_jacobian_inv;
+}
 
 #endif /* INCLUDE_SO3_H_ */
