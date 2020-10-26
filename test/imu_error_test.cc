@@ -20,18 +20,18 @@ struct ImuParameters{
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
   Transformation T_BS; ///< Transformation from Body frame to IMU (sensor frame S).
-  double a_max;  ///< Accelerometer saturation. [m/s^2]
-  double g_max;  ///< Gyroscope saturation. [rad/s]
-  double sigma_g_c;  ///< Gyroscope noise density.
-  double sigma_bg;  ///< Initial gyroscope bias.
-  double sigma_a_c;  ///< Accelerometer noise density.
-  double sigma_ba;  ///< Initial accelerometer bias
-  double sigma_gw_c; ///< Gyroscope drift noise density.
-  double sigma_aw_c; ///< Accelerometer drift noise density.
-  double tau;  ///< Reversion time constant of accerometer bias. [s]
-  double g;  ///< Earth acceleration.
+  double a_max;        ///< Accelerometer saturation. [m/s^2]
+  double g_max;        ///< Gyroscope saturation. [rad/s]
+  double sigma_g_c;    ///< Gyroscope noise density.
+  double sigma_bg;     ///< Initial gyroscope bias.
+  double sigma_a_c;    ///< Accelerometer noise density.
+  double sigma_ba;     ///< Initial accelerometer bias
+  double sigma_gw_c;   ///< Gyroscope drift noise density.
+  double sigma_aw_c;   ///< Accelerometer drift noise density.
+  double tau;          ///< Reversion time constant of accerometer bias. [s]
+  double g;            ///< Earth acceleration.
   Eigen::Vector3d a0;  ///< Mean of the prior accelerometer bias.
-  int rate;  ///< IMU rate in Hz.
+  int rate;            ///< IMU rate in Hz.
 };
 
 struct IMUData {
@@ -91,105 +91,68 @@ int main(int argc, char **argv) {
 
   google::InitGoogleLogging(argv[0]);
 
-  // set the imu parameters
-  ImuParameters imuParameters;
-  imuParameters.a0.setZero();
-  imuParameters.g = 9.81007;
-  imuParameters.a_max = 1000.0;
-  imuParameters.g_max = 1000.0;
-  imuParameters.rate = 1000; // 1 kHz
-  imuParameters.sigma_g_c = 6.0e-4;
-  imuParameters.sigma_a_c = 2.0e-3;
-  imuParameters.sigma_gw_c = 3.0e-6;
-  imuParameters.sigma_aw_c = 2.0e-5;
-  imuParameters.tau = 3600.0;
+  // parameters
+  const double dt = 0.01;                                     // time discretization  
+  Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
+  double sigma_g_c = 6.0e-4;
+  double sigma_a_c = 2.0e-3;
+
+
+  // starting states
+  Transformation T_WS;
+  T_WS.SetRandom(10.0, M_PI);
+
+  double t0 = 0;
+  Eigen::Quaterniond q0 = T_WS.q();
+  Eigen::Vector3d    v0(0.1, 0.1, 0.1);  
+  Eigen::Vector3d    p0 = T_WS.t();
+
+
 
   // generate random motion
-  const double w_omega_S_x = Eigen::internal::random(0.1,10.0); // circular frequency
-  const double w_omega_S_y = Eigen::internal::random(0.1,10.0); // circular frequency
-  const double w_omega_S_z = Eigen::internal::random(0.1,10.0); // circular frequency
-  const double p_omega_S_x = Eigen::internal::random(0.0,M_PI); // phase
-  const double p_omega_S_y = Eigen::internal::random(0.0,M_PI); // phase
-  const double p_omega_S_z = Eigen::internal::random(0.0,M_PI); // phase
   const double m_omega_S_x = Eigen::internal::random(0.1,1.0); // magnitude
   const double m_omega_S_y = Eigen::internal::random(0.1,1.0); // magnitude
-  const double m_omega_S_z = Eigen::internal::random(0.1,1.0); // magnitude
-  const double w_a_W_x = Eigen::internal::random(0.1,10.0);
-  const double w_a_W_y = Eigen::internal::random(0.1,10.0);
-  const double w_a_W_z = Eigen::internal::random(0.1,10.0);
-  const double p_a_W_x = Eigen::internal::random(0.1,M_PI);
-  const double p_a_W_y = Eigen::internal::random(0.1,M_PI);
-  const double p_a_W_z = Eigen::internal::random(0.1,M_PI);
+  const double m_omega_S_z = Eigen::internal::random(0.1,1.0); // magnitude  
   const double m_a_W_x = Eigen::internal::random(0.1,10.0);
   const double m_a_W_y = Eigen::internal::random(0.1,10.0);
   const double m_a_W_z = Eigen::internal::random(0.1,10.0);
 
 
-  Transformation T_WS;
-  T_WS.SetRandom(10.0, M_PI);
+  Eigen::Vector3d omega_S(m_omega_S_x,
+                          m_omega_S_y,
+                          m_omega_S_z);
 
-  // time increment
-  const double dt = 0.01; // time discretization
-
-  // states
-  Eigen::Quaterniond rotation = T_WS.q();
-  Eigen::Vector3d position = T_WS.t();
-  Eigen::Vector3d velocity(0.1, 0.1, 0.1);
-
-
-  // start
-  double t_0 = 0;
-  Transformation T_WS_0 = T_WS;
-  Eigen::Vector3d velocity_0 = velocity;
-
-
-
-
-  // just single IMU input
-  double time = dt;
-
-  Eigen::Vector3d omega_S(m_omega_S_x*sin(w_omega_S_x*time+p_omega_S_x),
-                          m_omega_S_y*sin(w_omega_S_y*time+p_omega_S_y),
-                          m_omega_S_z*sin(w_omega_S_z*time+p_omega_S_z));
-
-  Eigen::Vector3d a_W(m_a_W_x*sin(w_a_W_x*time+p_a_W_x),
-                      m_a_W_y*sin(w_a_W_y*time+p_a_W_y),
-                      m_a_W_z*sin(w_a_W_z*time+p_a_W_z));
+  Eigen::Vector3d a_W(m_a_W_x,
+                      m_a_W_y,
+                      m_a_W_z);
 
   Eigen::Quaterniond dq = Exp_q(omega_S*dt);
 
-  rotation = rotation * dq;
-
-  // propagate position
-  position += dt*velocity;
-  
-  // propagate speed
-  velocity += dt*a_W;
-
-
-
-
-
-  // end
-  double t_1 = time;
-  Transformation T_WS_1 = Transformation(rotation, position);
-  Eigen::Vector3d velocity_1 = velocity;
-
-
 
   // generate measurements
-  Eigen::Vector3d gyr_noise = imuParameters.sigma_g_c/sqrt(dt) * Eigen::Vector3d::Random();
-  Eigen::Vector3d acc_noise = imuParameters.sigma_a_c/sqrt(dt) * Eigen::Vector3d::Random();
+  Eigen::Vector3d gyr_noise = sigma_g_c/sqrt(dt) * Eigen::Vector3d::Random();
+  Eigen::Vector3d acc_noise = sigma_a_c/sqrt(dt) * Eigen::Vector3d::Random();
 
   Eigen::Vector3d gyr = omega_S + gyr_noise;
-  Eigen::Vector3d acc = T_WS.inverse().C()*(a_W + Eigen::Vector3d(0,0,imuParameters.g)) + acc_noise;
+  Eigen::Vector3d acc = q0.conjugate().toRotationMatrix()*(a_W - gravity) + acc_noise;
   
   IMUData imu_data;
 
-  imu_data.timestamp_ = time;
+  imu_data.timestamp_ = t0;
   imu_data.gyro_ = gyr;
   imu_data.accel_ = acc;
-  
+
+
+  // ending state
+  double t1 = t0 + dt;  
+
+  Eigen::Quaterniond q1 = q0 * dq;
+  Eigen::Vector3d v1 = v0 + dt*a_W;
+  Eigen::Vector3d p1 = p0 + dt*v0 + 0.5*dt*dt*a_W;
+
+  Transformation T_WS_1(q1, p1);
+
+
   //=========================================================================================================
   // Build the problem.
   ceres::Problem optimization_problem;
@@ -198,11 +161,14 @@ int main(int argc, char **argv) {
 
   // create the pose parameter blocks
   Transformation T_disturb;
-  T_disturb.SetRandom(1,0.2);
-  Transformation T_WS_1_disturbed = T_WS_1 * T_disturb; //
+  T_disturb.SetRandom(1, 0.2);
+  Transformation T_WS_1_disturbed = Transformation(q1, p1) * T_disturb;
+  Eigen::Vector3d v1_disturbed = v1 + 5*Eigen::Vector3d::Random();
 
-  State* state_0 = new State(t_0);
-  State* state_1 = new State(t_1);
+
+
+  State* state_0 = new State(t0);
+  State* state_1 = new State(t1);
 
 
   optimization_problem.AddParameterBlock(state_0->GetRotationBlock()->parameters(), 4, quat_parameterization_ptr_);
@@ -213,26 +179,28 @@ int main(int argc, char **argv) {
   optimization_problem.AddParameterBlock(state_1->GetVelocityBlock()->parameters(), 3);
   optimization_problem.AddParameterBlock(state_1->GetPositionBlock()->parameters(), 3);
 
-  state_0->GetRotationBlock()->setEstimate(T_WS_0.q());
-  state_0->GetVelocityBlock()->setEstimate(velocity_0);
-  state_0->GetPositionBlock()->setEstimate(T_WS_0.t());
+
+  state_0->GetRotationBlock()->setEstimate(q0);
+  state_0->GetVelocityBlock()->setEstimate(v0);
+  state_0->GetPositionBlock()->setEstimate(p0);
 
   state_1->GetRotationBlock()->setEstimate(T_WS_1_disturbed.q());
-  state_1->GetVelocityBlock()->setEstimate(velocity_1);
+  state_1->GetVelocityBlock()->setEstimate(v1_disturbed);
   state_1->GetPositionBlock()->setEstimate(T_WS_1_disturbed.t());
 
   optimization_problem.SetParameterBlockConstant(state_0->GetRotationBlock()->parameters());
   optimization_problem.SetParameterBlockConstant(state_0->GetVelocityBlock()->parameters());
   optimization_problem.SetParameterBlockConstant(state_0->GetPositionBlock()->parameters());
 
+
   // add constraints
-  ceres::CostFunction* cost_function = new ImuError(imu_data.gyro_,
-                                                    imu_data.accel_,
+  ceres::CostFunction* cost_function = new ImuError(gyr,
+                                                    acc,
                                                     dt,
                                                     Eigen::Vector3d(0,0,0),
                                                     Eigen::Vector3d(0,0,0),                   
-                                                    imuParameters.sigma_g_c,
-                                                    imuParameters.sigma_a_c);
+                                                    sigma_g_c,
+                                                    sigma_a_c);
 
   optimization_problem.AddResidualBlock(cost_function,
                                         NULL,
@@ -254,7 +222,10 @@ int main(int argc, char **argv) {
   // print some infos about the optimization
   std::cout << optimization_summary.FullReport() << "\n";
 
+
   Transformation T_WS_1_opt = Transformation(state_1->GetRotationBlock()->estimate(), state_1->GetPositionBlock()->estimate());
+  Eigen::Vector3d v1_opt = state_1->GetVelocityBlock()->estimate();
+
   std::cout << "initial T_WS_1 : " << T_WS_1_disturbed.T() << "\n"
             << "optimized T_WS_1 : " << T_WS_1_opt.T() << "\n"
             << "correct T_WS_1 : " << T_WS_1.T() << "\n";
@@ -262,13 +233,11 @@ int main(int argc, char **argv) {
   std::cout << "rotation difference of the initial T_nb : " << 2*(T_WS_1.q() * T_WS_1_disturbed.q().inverse()).vec().norm() << "\n";
   std::cout << "rotation difference of the optimized T_nb : " << 2*(T_WS_1.q() * T_WS_1_opt.q().inverse()).vec().norm() << "\n";
 
+  std::cout << "velocity difference of the initial T_nb : " << (v1 - v1_disturbed).norm() << "\n";
+  std::cout << "velocity difference of the optimized T_nb : " << (v1 - v1_opt).norm() << "\n";
+
   std::cout << "translation difference of the initial T_nb : " << (T_WS_1.t() - T_WS_1_disturbed.t()).norm() << "\n";
   std::cout << "translation difference of the optimized T_nb : " << (T_WS_1.t() - T_WS_1_opt.t()).norm() << "\n";
-
-  // make sure it converged
-  // assert(("cost not reducible", optimization_summary.final_cost < 1e-2));
-  // assert(("quaternions not close enough", 2*(T_WS_1.q() * T_WS_1_opt.q().inverse()).vec().norm() < 1e-2));
-  // assert(("translation not close enough", (T_WS_1.t() - T_WS_1_opt.t()).norm() < 0.04));
 
   return 0;
 }

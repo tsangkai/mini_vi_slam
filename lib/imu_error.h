@@ -12,15 +12,6 @@
 #define INCLUDE_IMU_ERROR_H_
 
 #include "so3.h"
-// #include <mutex>
-// #include "ceres/ceres.h"
-// #include <okvis/FrameTypedefs.hpp>
-// #include <okvis/Time.hpp>
-// #include <okvis/assert_macros.hpp>
-// #include <okvis/Measurements.hpp>
-// #include <okvis/Variables.hpp>
-// #include <okvis/Parameters.hpp>
-// #include <okvis/ceres/ErrorInterface.hpp>
 
 
 /// \brief Implements a nonlinear IMU factor.
@@ -124,13 +115,10 @@ class ImuError :
     Eigen::Vector3d v_diff = dt_* acc_plus_gravity;
     Eigen::Vector3d p_diff = dt_*v_t0 + (0.5*dt_*dt_)* acc_plus_gravity;
 
-    Eigen::Quaterniond d_q = Exp_q(gyr_-gyr_bias_);
+    Eigen::Quaterniond d_q = Exp_q(dt_*(gyr_-gyr_bias_));
 
-    //(1, 0.5*dt_*(gyr_(0)-gyr_bias_(0)),
-    //                          0.5*dt_*(gyr_(1)-gyr_bias_(1)),
-    //                          0.5*dt_*(gyr_(2)-gyr_bias_(2)));
-
-    r_q = Log_q((q_t0 * d_q).conjugate() * q_t1);
+    Eigen::Quaterniond delta_q = (q_t0*d_q).conjugate() * q_t1;
+    r_q = Log_q(delta_q);
     r_v = v_t1 - (v_t0 + v_diff);
     r_p = p_t1 - (p_t0 + p_diff);
 
@@ -162,11 +150,10 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t1(jacobians[0]);      
         J_q_t1.setZero();
 
-        // TODO
-        Eigen::Quaterniond q_t_inv_q_t1 = q_t0.conjugate() * q_t1;
-        Eigen::Matrix<double, 3, 3> J_res_2_dq_t1 = (-1/dt_) * RightJacobianInv(Log_q(q_t_inv_q_t1)) * q_t0.conjugate().toRotationMatrix();
+        Eigen::Matrix<double, 3, 3> J_res_q_2_q1 = LeftJacobianInv(Log_q(delta_q)) * (q_t0*d_q).conjugate().toRotationMatrix();
       
-        J_q_t1.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_2_dq_t1 * QuatLiftJacobian(q_t1);
+        J_q_t1.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_q_2_q1 * QuatLiftJacobian(q_t1);
+
       }  
 
       // velocity_t1
@@ -193,9 +180,10 @@ class ImuError :
 
         // TODO
         Eigen::Quaterniond q_t_inv_q_t1 = q_t0.conjugate() * q_t1;
-        Eigen::Matrix<double, 3, 3> J_res_2_dq_t = (-1/dt_) * RightJacobianInv(Log_q(q_t_inv_q_t1)) * (-1) * q_t0.toRotationMatrix().transpose();
+
+        Eigen::Matrix<double, 3, 3> J_res_q_2_q0 = LeftJacobianInv(Log_q(delta_q)) * (-1) * (q_t0*d_q).toRotationMatrix().transpose();
       
-        J_q_t.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_2_dq_t * QuatLiftJacobian(q_t0);
+        J_q_t.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_q_2_q0 * QuatLiftJacobian(q_t0);
 
         J_q_t.block<3,3>(3,0) = (1/v_noise_sigma) * (dt_) * Skew(q_t0.toRotationMatrix() * v_diff);
         J_q_t.block<3,3>(6,0) = (1/p_noise_sigma) * (0.5*dt_*dt_) * Skew(q_t0.toRotationMatrix() * p_diff);
