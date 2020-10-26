@@ -118,6 +118,7 @@ Eigen::Matrix<double, 3, 4> QuatLiftJacobian(const Eigen::Quaterniond & q) {
 }
 
 // [Chirikjian] p.40 (10.86)
+// TODO: approximation when the input norm is small
 Eigen::Matrix3d LeftJacobian(const Eigen::Vector3d & v) {
 
   Eigen::Matrix3d right_jacobian;
