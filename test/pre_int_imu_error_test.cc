@@ -84,7 +84,6 @@ PreIntIMUData Preintegrate(std::vector<IMUData> imu_data_vec) {
     Eigen::Vector3d gyro_bias = Eigen::Vector3d(0, 0, 0);
     Eigen::Vector3d accel_bias = Eigen::Vector3d(0, 0, 0);
 
-
     Eigen::Matrix3d Delta_R = Eigen::Matrix3d::Identity();
     Eigen::Vector3d Delta_V = Eigen::Vector3d(0, 0, 0);
     Eigen::Vector3d Delta_P = Eigen::Vector3d(0, 0, 0);
@@ -149,7 +148,7 @@ int main(int argc, char **argv) {
   // set the imu parameters
   ImuParameters imuParameters;
   imuParameters.a0.setZero();
-  imuParameters.g = 9.81;
+  imuParameters.g = 9.81007;
   imuParameters.a_max = 1000.0;
   imuParameters.g_max = 1000.0;
   imuParameters.rate = 1000; // 1 kHz
@@ -253,15 +252,12 @@ int main(int argc, char **argv) {
     // T_WS
     T_WS = Transformation(q, position);
 
-    // speedAndBias - v only, obviously, since this is the Ground Truth
-    // velocity = v;
-
     // generate measurements
     Eigen::Vector3d gyr_noise = imuParameters.sigma_g_c/sqrt(dt) * Eigen::Vector3d::Random();
     Eigen::Vector3d acc_noise = imuParameters.sigma_a_c/sqrt(dt) * Eigen::Vector3d::Random();
 
     Eigen::Vector3d gyr = omega_S + gyr_noise;
-    Eigen::Vector3d acc = T_WS.inverse().C()*(a_W+Eigen::Vector3d(0,0,imuParameters.g)) + acc_noise;
+    Eigen::Vector3d acc = T_WS.inverse().C()*(a_W + Eigen::Vector3d(0,0,imuParameters.g)) + acc_noise;
   
     IMUData imu_data;
 
@@ -273,7 +269,6 @@ int main(int argc, char **argv) {
     if (i>=10 && i<size_t(duration*imuParameters.rate)-10) {
       imu_data_vec.push_back(imu_data);
     }
-
   }
   
 

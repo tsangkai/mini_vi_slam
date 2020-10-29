@@ -8,8 +8,10 @@
 #include <cmath>
 
 
+const double eps = 1e-8;
+
 double sinc(double x){
-  if(fabs(x)>1e-10) {
+  if(fabs(x) > eps) {
     return sin(x)/x;
   }
   else {
@@ -45,7 +47,19 @@ Eigen::Matrix3d Hat(Eigen::Vector3d v) {
 }
 
 
+Eigen::Matrix3d Exp(Eigen::Vector3d omega) {
 
+  if (omega.norm() < eps) {
+    return Eigen::Matrix3d::Identity() + Hat(omega);
+  }
+  else {
+    double omega_norm = omega.norm();
+    Eigen::Matrix3d hatted_omega = Hat((1/omega_norm)*omega);
+
+    return Eigen::Matrix3d::Identity() + sin(omega_norm) * hatted_omega + (1 - cos(omega_norm)) * hatted_omega * hatted_omega;
+  }
+
+}
 
 // [Sola] (101)
 // [Bloesch et al] (38)
@@ -59,6 +73,8 @@ Eigen::Quaterniond Exp_q(const Eigen::Vector3d v) {
   q.w() = cos_v_half_norm;  
   q.vec() = 0.5 * sinc_v_half_norm * v;
 
+  assert(("norm is too small in Exp_q", v_half_norm > eps));
+
   return q;
 }
 
@@ -68,7 +84,7 @@ Eigen::Quaterniond Exp_q(const Eigen::Vector3d v) {
 Eigen::Vector3d Log_q(const Eigen::Quaterniond q) {
 
   double atan = atan2(q.vec().norm(), q.w());
-  if (abs(atan) < 1e-10) {
+  if (abs(atan) < eps) {
     return 2 * q.vec();
   }
 
@@ -121,32 +137,42 @@ Eigen::Matrix<double, 3, 4> QuatLiftJacobian(const Eigen::Quaterniond & q) {
 // TODO: approximation when the input norm is small
 Eigen::Matrix3d LeftJacobian(const Eigen::Vector3d & v) {
 
-  Eigen::Matrix3d right_jacobian;
+  Eigen::Matrix3d left_jacobian;
 
   const double v_norm = v.norm();
   const double v_norm_2 = v_norm*v_norm;
   const double v_norm_3 = v_norm_2*v_norm;
   const Eigen::Matrix3d skewed_v = Skew(v);
 
-  right_jacobian = Eigen::Matrix3d::Identity() + ((1-cos(v_norm))/v_norm_2) * skewed_v + ((v_norm-sin(v_norm))/v_norm_3) * skewed_v * skewed_v;
 
-  return right_jacobian;
+  if (v_norm > eps) {
+    left_jacobian = Eigen::Matrix3d::Identity() + ((1-cos(v_norm))/v_norm_2) * skewed_v + ((v_norm-sin(v_norm))/v_norm_3) * skewed_v * skewed_v;
+  }
+  else {
+    left_jacobian = Eigen::Matrix3d::Identity() + 0.5 * skewed_v;
+  }
+
+  return left_jacobian;
 }
 
 // [Chirikjian] p.40 (10.86)
 Eigen::Matrix3d LeftJacobianInv(const Eigen::Vector3d & v) {
 
-  Eigen::Matrix3d right_jacobian_inv;
+  Eigen::Matrix3d left_jacobian_inv;
 
   const double v_norm = v.norm();
   const double v_norm_2 = v_norm*v_norm;
   const Eigen::Matrix3d skewed_v = Skew(v);
 
-  // assert(("norm is too small", v_norm > 1e-10));
 
-  right_jacobian_inv = Eigen::Matrix3d::Identity() - 0.5 * skewed_v + (1/v_norm_2  - (1+cos(v_norm))/(2*v_norm*sin(v_norm))) * skewed_v * skewed_v;
+  if (v_norm > eps) {
+    left_jacobian_inv = Eigen::Matrix3d::Identity() - 0.5 * skewed_v + (1/v_norm_2  - (1+cos(v_norm))/(2*v_norm*sin(v_norm))) * skewed_v * skewed_v;
+  }
+  else {
+    left_jacobian_inv = Eigen::Matrix3d::Identity() - 0.5 * skewed_v;
+  }
 
-  return right_jacobian_inv;
+  return left_jacobian_inv;
 }
 
 
@@ -158,6 +184,8 @@ Eigen::Matrix3d RightJacobian(const Eigen::Vector3d & v) {
   const double v_norm_2 = v_norm*v_norm;
   const double v_norm_3 = v_norm_2*v_norm;
   const Eigen::Matrix3d skewed_v = Skew(v);
+
+  assert(("norm is too small in RightJacobian", v_norm > eps));
 
   right_jacobian = Eigen::Matrix3d::Identity() - ((1-cos(v_norm))/v_norm_2) * skewed_v + ((v_norm-sin(v_norm))/v_norm_3) * skewed_v * skewed_v;
 
@@ -173,17 +201,13 @@ Eigen::Matrix3d RightJacobianInv(const Eigen::Vector3d & v) {
   const double v_norm_2 = v_norm*v_norm;
   const Eigen::Matrix3d skewed_v = Skew(v);
 
+  assert(("norm is too small in RightJacobianInv", v_norm > eps));
+
   right_jacobian_inv = Eigen::Matrix3d::Identity() + 0.5 * skewed_v + (1/v_norm_2  - (1+cos(v_norm))/(2*v_norm*sin(v_norm))) * skewed_v * skewed_v;
 
   return right_jacobian_inv;
 }
 
 
-Eigen::Matrix3d Exp(Eigen::Vector3d omega) {
-  Eigen::Matrix3d hatted_omega = Hat(omega);
-  double bar_omega = acos(0.5*(hatted_omega.trace()-1));
-
-  return Eigen::Matrix3d::Identity() + (sin(bar_omega)/bar_omega) * hatted_omega + ((1-cos(bar_omega))/(bar_omega*bar_omega)) * hatted_omega*hatted_omega;
-}
 
 #endif /* INCLUDE_SO3_H_ */

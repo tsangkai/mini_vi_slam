@@ -34,10 +34,9 @@ double ConverStrTime(std::string time_str) {
   return std::stoi(time_str_sec) + std::stoi(time_str_nano_sec)*1e-9;
 }
 
-class IMUData {
+struct IMUData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
- public:
   IMUData(std::string imu_data_str) {
     std::stringstream str_stream(imu_data_str);          // Create a stringstream of the current line
 
@@ -49,39 +48,39 @@ class IMUData {
 
       for (int i=0; i<3; ++i) {                          // gyrometer measurement
         std::getline(str_stream, data_str, ','); 
-        gyro_(i) = std::stod(data_str);
+        gyr_(i) = std::stod(data_str);
       }
 
       for (int i=0; i<3; ++i) {                    
         std::getline(str_stream, data_str, ',');         // accelerometer measurement 
-        accel_(i) = std::stod(data_str);
+        acc_(i) = std::stod(data_str);
       }
     }
   }
 
+  /***
   double GetTimestamp() {
     return timestamp_;
   }
 
   Eigen::Vector3d GetGyroMeasurement() {
-    return gyro_;
+    return gyr_;
   }
 
   Eigen::Vector3d GetAccelMeasurement() {
-    return accel_;
+    return acc_;
   }
+  ***/
 
- private:
   double timestamp_;
-  Eigen::Vector3d gyro_;
-  Eigen::Vector3d accel_; 
+  Eigen::Vector3d gyr_;
+  Eigen::Vector3d acc_; 
 };
 
 
-class ObservationData {
+struct ObservationData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
- public:
   ObservationData(std::string observation_data_str) {
     std::stringstream str_stream(observation_data_str);          // Create a stringstream of the current line
 
@@ -98,25 +97,16 @@ class ObservationData {
         std::getline(str_stream, data_str, ','); 
         feature_pos_(i) = std::stod(data_str);
       }
+
+      std::getline(str_stream, data_str, ','); 
+      size_ = std::stod(data_str);
     }
   }
 
-  double GetTimestamp() {
-    return timestamp_;
-  }
-
-  double GetId() {
-    return index_;
-  }
-
-  Eigen::Vector2d GetFeaturePosition() {
-    return feature_pos_;
-  }
-
- private:
   double timestamp_;
   size_t index_;
   Eigen::Vector2d feature_pos_; 
+  double size_;
 };
 
 class State {
@@ -199,10 +189,13 @@ class ExpLandmarkOptSLAM {
 
     fu_ = experiment_config_file["cameras"][0]["focal_length"][0];
     fv_ = experiment_config_file["cameras"][0]["focal_length"][1];
-    // focal_length_ = 0.5*focal_length_0 + 0.5*focal_length_1;
 
     cu_ = experiment_config_file["cameras"][0]["principal_point"][0];
     cv_ = experiment_config_file["cameras"][0]["principal_point"][1];
+
+    sigma_g_c_ = experiment_config_file["imu_params"]["sigma_g_c"];
+    sigma_a_c_ = experiment_config_file["imu_params"]["sigma_a_c"];
+
     
     return true;
   }
@@ -366,15 +359,17 @@ class ExpLandmarkOptSLAM {
 
       IMUData imu_data(imu_data_str);
 
-      if (time_begin_ <= imu_data.GetTimestamp() && imu_data.GetTimestamp() <= time_end_) {
+      if (time_begin_ <= imu_data.timestamp_ && imu_data.timestamp_ <= time_end_) {
 
         imu_data_vec.push_back(imu_data);
 
         if (imu_data_vec.size()>1) {
 
-          state_parameter_.push_back(new State(imu_data.GetTimestamp()));
+          state_parameter_.push_back(new State(imu_data.timestamp_));
 
           optimization_problem_.AddParameterBlock(state_parameter_.back()->GetRotationBlock()->parameters(), 4, quat_parameterization_ptr_);
+          optimization_problem_.AddParameterBlock(state_parameter_.back()->GetVelocityBlock()->parameters(), 3);
+          optimization_problem_.AddParameterBlock(state_parameter_.back()->GetPositionBlock()->parameters(), 3);
         }
       }
     }
@@ -388,18 +383,12 @@ class ExpLandmarkOptSLAM {
       Eigen::Vector3d velocity_t = state_parameter_.at(i)->GetVelocityBlock()->estimate();
       Eigen::Vector3d position_t = state_parameter_.at(i)->GetPositionBlock()->estimate();
 
-      Eigen::Vector3d accel_measurement = imu_data_vec.at(i).GetAccelMeasurement();
-      Eigen::Vector3d gyro_measurement = imu_data_vec.at(i).GetGyroMeasurement();      
+      Eigen::Vector3d accel_measurement = imu_data_vec.at(i).acc_;
+      Eigen::Vector3d gyro_measurement = imu_data_vec.at(i).gyr_;      
       Eigen::Vector3d accel_plus_gravity = rotation_t.toRotationMatrix()*(accel_measurement - accel_bias) + gravity;
       
-      /***
-      Eigen::Quaterniond rotation_t1 = rotation_t * Eigen::Quaterniond(1, 0.5*time_diff*(gyro_measurement(0)-gyro_bias(0)), 
-                                                                          0.5*time_diff*(gyro_measurement(1)-gyro_bias(1)), 
-                                                                          0.5*time_diff*(gyro_measurement(2)-gyro_bias(2)));
-      ***/
 
       Eigen::Quaterniond rotation_t1 = rotation_t * Exp_q(time_diff*(gyro_measurement-gyro_bias));
-
       Eigen::Vector3d velocity_t1 = velocity_t + time_diff*accel_plus_gravity;
       Eigen::Vector3d position_t1 = position_t + time_diff*velocity_t + (0.5*time_diff*time_diff)*accel_plus_gravity;
 
@@ -412,11 +401,13 @@ class ExpLandmarkOptSLAM {
 
       
       // add constraints
-      ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).GetGyroMeasurement(),
-                                                        imu_data_vec.at(i).GetAccelMeasurement(),
+      ceres::CostFunction* cost_function = new ImuError(imu_data_vec.at(i).gyr_,
+                                                        imu_data_vec.at(i).acc_,
                                                         time_diff,
-                                                        Eigen::Vector3d(-0.003196, 0.021298, 0.078430),
-                                                        Eigen::Vector3d(-0.026176, 0.137568, 0.076295));
+                                                        Eigen::Vector3d(-0.003196, 0.021298, 0.078430),  // gyr bias
+                                                        Eigen::Vector3d(-0.026176, 0.137568, 0.076295),  // acc bias
+                                                        sigma_g_c_,
+                                                        sigma_a_c_);
 
 
       optimization_problem_.AddResidualBlock(cost_function,
@@ -428,7 +419,7 @@ class ExpLandmarkOptSLAM {
                                                  state_parameter_.at(i)->GetVelocityBlock()->parameters(),
                                                  state_parameter_.at(i)->GetPositionBlock()->parameters());   
 
-
+      /***
       optimization_problem_.SetParameterLowerBound(state_parameter_.at(i+1)->GetPositionBlock()->parameters(), 0, -2.8);
       optimization_problem_.SetParameterLowerBound(state_parameter_.at(i+1)->GetPositionBlock()->parameters(), 1,  4.2);
       optimization_problem_.SetParameterLowerBound(state_parameter_.at(i+1)->GetPositionBlock()->parameters(), 2, -1.8);
@@ -436,6 +427,7 @@ class ExpLandmarkOptSLAM {
       optimization_problem_.SetParameterUpperBound(state_parameter_.at(i+1)->GetPositionBlock()->parameters(), 0, 1.8);
       optimization_problem_.SetParameterUpperBound(state_parameter_.at(i+1)->GetPositionBlock()->parameters(), 1, 8.8);
       optimization_problem_.SetParameterUpperBound(state_parameter_.at(i+1)->GetPositionBlock()->parameters(), 2, 2.8);
+      ***/
     }
 
     input_file.close();
@@ -462,10 +454,10 @@ class ExpLandmarkOptSLAM {
 
       // add observation constraints
       size_t pose_id;
-      size_t landmark_id = observation_data.GetId()-1;
+      size_t landmark_id = observation_data.index_-1;
 
       for (size_t i=0; i<state_parameter_.size(); ++i) {
-        if (observation_data.GetTimestamp() <= state_parameter_.at(i)->GetTimestamp()) {
+        if (observation_data.timestamp_ <= state_parameter_.at(i)->GetTimestamp()) {
           pose_id = i;
           break;
         }
@@ -475,13 +467,14 @@ class ExpLandmarkOptSLAM {
         landmark_parameter_.resize(landmark_id+1);
       }
 
-      landmark_parameter_.at(landmark_id) = new Vec3dParameterBlock(Eigen::Vector3d(0, 0, 0));
-      // landmark_parameter_.at(landmark_id) = new Vec3dParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());
+      // landmark_parameter_.at(landmark_id) = new Vec3dParameterBlock(Eigen::Vector3d(0, 0, 0));
+      landmark_parameter_.at(landmark_id) = new Vec3dParameterBlock(Eigen::Vector3d()+0.5*Eigen::Vector3d::Random());
 
-      ceres::CostFunction* cost_function = new ReprojectionError(observation_data.GetFeaturePosition(),
+      ceres::CostFunction* cost_function = new ReprojectionError(observation_data.feature_pos_,
                                                                  T_bc_,
                                                                  fu_, fv_,
-                                                                 cu_, cv_);
+                                                                 cu_, cv_,
+                                                                 (observation_data.size_*observation_data.size_/64.0)*Eigen::Matrix2d::Identity());
 
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
@@ -531,7 +524,6 @@ class ExpLandmarkOptSLAM {
 
     // Step 2: optimize trajectory
     optimization_options_.max_num_iterations = 30;
-
 
     for (size_t i=1; i<state_parameter_.size(); ++i) {
       optimization_problem_.SetParameterBlockVariable(state_parameter_.at(i)->GetRotationBlock()->parameters());
@@ -602,6 +594,9 @@ class ExpLandmarkOptSLAM {
 
   double accel_bias_parameter_[3];
   double gyro_bias_parameter_[3];
+
+  double sigma_g_c_;   // gyro noise density [rad/s/sqrt(Hz)]
+  double sigma_a_c_;   //  accelerometer noise density [m/s^2/sqrt(Hz)]
 
   // ceres parameter
   ceres::LocalParameterization* quat_parameterization_ptr_;

@@ -93,21 +93,10 @@ int main(int argc, char **argv) {
 
   // parameters
   const double dt = 0.01;                                     // time discretization  
+  const size_t step = 10;
   Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
   double sigma_g_c = 6.0e-4;
   double sigma_a_c = 2.0e-3;
-
-
-  // starting states
-  Transformation T_WS;
-  T_WS.SetRandom(10.0, M_PI);
-
-  double t0 = 0;
-  Eigen::Quaterniond q0 = T_WS.q();
-  Eigen::Vector3d    v0(0.1, 0.1, 0.1);  
-  Eigen::Vector3d    p0 = T_WS.t();
-
-
 
   // generate random motion
   const double m_omega_S_x = Eigen::internal::random(0.1,1.0); // magnitude
@@ -125,6 +114,35 @@ int main(int argc, char **argv) {
   Eigen::Vector3d a_W(m_a_W_x,
                       m_a_W_y,
                       m_a_W_z);
+
+
+  // Build the problem.
+  ceres::Problem optimization_problem;
+  ceres::LocalParameterization* quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
+
+
+  // starting states
+  Transformation T_WS;
+  T_WS.SetRandom(10.0, M_PI);
+
+  double t0 = 0;
+  Eigen::Quaterniond q0 = T_WS.q();
+  Eigen::Vector3d    v0(0.1, 0.1, 0.1);  
+  Eigen::Vector3d    p0 = T_WS.t();
+
+  
+
+  for (size_t j=0; j<step; ++j) {
+
+  }
+
+
+
+
+
+
+
+
 
   Eigen::Quaterniond dq = Exp_q(omega_S*dt);
 
@@ -153,10 +171,9 @@ int main(int argc, char **argv) {
   Transformation T_WS_1(q1, p1);
 
 
+
   //=========================================================================================================
-  // Build the problem.
-  ceres::Problem optimization_problem;
-  ceres::LocalParameterization* quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
+
 
 
   // create the pose parameter blocks

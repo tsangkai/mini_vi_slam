@@ -127,9 +127,9 @@ class ImuError :
     double gyr_input_sigma = sigma_g_c_ / sqrt(dt_);
     double acc_input_sigma = sigma_a_c_ / sqrt(dt_);
 
-    double q_noise_sigma = (-1) * dt_ * gyr_input_sigma;
-    double v_noise_sigma = (-1) * dt_ * acc_input_sigma;
-    double p_noise_sigma = (-0.5) * dt_ * dt_ * acc_input_sigma;
+    double q_noise_sigma = 1;// (-1) * dt_ * gyr_input_sigma;
+    double v_noise_sigma = 1;//(-1) * dt_ * acc_input_sigma;
+    double p_noise_sigma = 1;//(-0.5) * dt_ * dt_ * acc_input_sigma;
 
     r_q = (1.0 / q_noise_sigma) * r_q;
     r_v = (1.0 / v_noise_sigma) * r_v;
