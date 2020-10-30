@@ -284,9 +284,9 @@ int main(int argc, char **argv) {
   // create the pose parameter blocks
   Transformation T_disturb;
   T_disturb.SetRandom(1, 0.2);
-  Transformation T_WS_1_disturbed = Transformation(q1, p1) * T_disturb;
-  Eigen::Vector3d v1_disturbed = v1 + 5*Eigen::Vector3d::Random();
-  Eigen::Vector3d p1_disturbed = p1 + 5*Eigen::Vector3d::Random();
+  Transformation T_WS_0_disturbed = Transformation(q0, p0) * T_disturb;
+  Eigen::Vector3d v0_disturbed = v0 + 5*Eigen::Vector3d::Random();
+  Eigen::Vector3d p0_disturbed = p0 + 5*Eigen::Vector3d::Random();
 
 
   State* state0 = new State(t0);
@@ -302,17 +302,17 @@ int main(int argc, char **argv) {
   optimization_problem.AddParameterBlock(state1->GetPositionBlock()->parameters(), 3);
 
 
-  state0->GetRotationBlock()->setEstimate(q0);
-  state0->GetVelocityBlock()->setEstimate(v0);
-  state0->GetPositionBlock()->setEstimate(p0);
+  state0->GetRotationBlock()->setEstimate(T_WS_0_disturbed.q());
+  state0->GetVelocityBlock()->setEstimate(v0_disturbed);
+  state0->GetPositionBlock()->setEstimate(T_WS_0_disturbed.t());
 
-  state1->GetRotationBlock()->setEstimate(T_WS_1_disturbed.q());
-  state1->GetVelocityBlock()->setEstimate(v1_disturbed);
-  state1->GetPositionBlock()->setEstimate(T_WS_1_disturbed.t());
+  state1->GetRotationBlock()->setEstimate(q1);
+  state1->GetVelocityBlock()->setEstimate(v1);
+  state1->GetPositionBlock()->setEstimate(p1);
 
-  optimization_problem.SetParameterBlockConstant(state0->GetRotationBlock()->parameters());
-  optimization_problem.SetParameterBlockConstant(state0->GetVelocityBlock()->parameters());
-  optimization_problem.SetParameterBlockConstant(state0->GetPositionBlock()->parameters());
+  optimization_problem.SetParameterBlockConstant(state1->GetRotationBlock()->parameters());
+  optimization_problem.SetParameterBlockConstant(state1->GetVelocityBlock()->parameters());
+  optimization_problem.SetParameterBlockConstant(state1->GetPositionBlock()->parameters());
 
   // add constraints
   ceres::CostFunction* cost_function = new PreIntImuError(pre_int_imu_data.dt_,
@@ -345,9 +345,9 @@ int main(int argc, char **argv) {
   // Transformation T_WS_1_opt = Transformation(state1->GetRotationBlock()->estimate(), state1->GetPositionBlock()->estimate());
   // Eigen::Vector3d v1_opt = state_1->GetVelocityBlock()->estimate();
 
-  Eigen::Quaterniond q1_opt = state1->GetRotationBlock()->estimate();
-  Eigen::Vector3d v1_opt = state1->GetVelocityBlock()->estimate();
-  Eigen::Vector3d p1_opt = state1->GetPositionBlock()->estimate();
+  Eigen::Quaterniond q0_opt = state0->GetRotationBlock()->estimate();
+  Eigen::Vector3d v0_opt = state0->GetVelocityBlock()->estimate();
+  Eigen::Vector3d p0_opt = state0->GetPositionBlock()->estimate();
 
   /***
   std::cout << "initial T_WS_1 : " << T_WS_1_disturbed.T() << "\n"
@@ -355,14 +355,14 @@ int main(int argc, char **argv) {
             << "correct T_WS_1 : " << Transformation().T() << "\n";
   ***/
 
-  std::cout << "rotation difference of the initial T_nb : " << 2*(q1 * T_WS_1_disturbed.q().inverse()).vec().norm() << "\n";
-  std::cout << "rotation difference of the optimized T_nb : " << 2*(q1 * q1_opt.inverse()).vec().norm() << "\n";
+  std::cout << "rotation difference of the initial T_nb : " << 2*(q0 * T_WS_0_disturbed.q().inverse()).vec().norm() << "\n";
+  std::cout << "rotation difference of the optimized T_nb : " << 2*(q0 * q0_opt.inverse()).vec().norm() << "\n";
 
-  std::cout << "velocity difference of the initial T_nb : " << (v1 - v1_disturbed).norm() << "\n";
-  std::cout << "velocity difference of the optimized T_nb : " << (v1 - v1_opt).norm() << "\n";
+  std::cout << "velocity difference of the initial T_nb : " << (v0 - v0_disturbed).norm() << "\n";
+  std::cout << "velocity difference of the optimized T_nb : " << (v0 - v0_opt).norm() << "\n";
 
-  std::cout << "translation difference of the initial T_nb : " << (p1 - T_WS_1_disturbed.t()).norm() << "\n";
-  std::cout << "translation difference of the optimized T_nb : " << (p1 - p1_opt).norm() << "\n";
+  std::cout << "translation difference of the initial T_nb : " << (p0 - T_WS_0_disturbed.t()).norm() << "\n";
+  std::cout << "translation difference of the optimized T_nb : " << (p0 - p0_opt).norm() << "\n";
 
   return 0;
 }
