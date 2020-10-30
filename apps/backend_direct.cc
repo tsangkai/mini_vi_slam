@@ -58,20 +58,6 @@ struct IMUData {
     }
   }
 
-  /***
-  double GetTimestamp() {
-    return timestamp_;
-  }
-
-  Eigen::Vector3d GetGyroMeasurement() {
-    return gyr_;
-  }
-
-  Eigen::Vector3d GetAccelMeasurement() {
-    return acc_;
-  }
-  ***/
-
   double timestamp_;
   Eigen::Vector3d gyr_;
   Eigen::Vector3d acc_; 

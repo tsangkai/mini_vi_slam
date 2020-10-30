@@ -127,9 +127,9 @@ class ImuError :
     double gyr_input_sigma = sigma_g_c_ / sqrt(dt_);
     double acc_input_sigma = sigma_a_c_ / sqrt(dt_);
 
-    double q_noise_sigma = 1;// (-1) * dt_ * gyr_input_sigma;
-    double v_noise_sigma = 1;//(-1) * dt_ * acc_input_sigma;
-    double p_noise_sigma = 1;//(-0.5) * dt_ * dt_ * acc_input_sigma;
+    double q_noise_sigma = (-1) * dt_ * gyr_input_sigma;
+    double v_noise_sigma = (-1) * dt_ * acc_input_sigma;
+    double p_noise_sigma = (-0.5) * dt_ * dt_ * acc_input_sigma;
 
     r_q = (1.0 / q_noise_sigma) * r_q;
     r_v = (1.0 / v_noise_sigma) * r_v;
@@ -150,7 +150,7 @@ class ImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t1(jacobians[0]);      
         J_q_t1.setZero();
 
-        Eigen::Matrix<double, 3, 3> J_res_q_2_q1 = LeftJacobianInv(Log_q(delta_q)) * (q_t0*d_q).conjugate().toRotationMatrix();
+        Eigen::Matrix<double, 3, 3> J_res_q_2_q1 = LeftJacobianInv(r_q) * (q_t0*d_q).conjugate().toRotationMatrix();
       
         J_q_t1.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_q_2_q1 * QuatLiftJacobian(q_t1);
 
@@ -184,9 +184,9 @@ class ImuError :
         Eigen::Matrix<double, 3, 3> J_res_q_2_q0 = LeftJacobianInv(Log_q(delta_q)) * (-1) * (q_t0*d_q).toRotationMatrix().transpose();
       
         J_q_t.block<3,4>(0,0) = (1/q_noise_sigma) * J_res_q_2_q0 * QuatLiftJacobian(q_t0);
+        J_q_t.block<3,4>(3,0) = (1/v_noise_sigma) * (dt_) * Skew(q_t0.toRotationMatrix() * v_diff) * QuatLiftJacobian(q_t0);
+        J_q_t.block<3,4>(6,0) = (1/p_noise_sigma) * (0.5*dt_*dt_) * Skew(q_t0.toRotationMatrix() * p_diff) * QuatLiftJacobian(q_t0);
 
-        J_q_t.block<3,3>(3,0) = (1/v_noise_sigma) * (dt_) * Skew(q_t0.toRotationMatrix() * v_diff);
-        J_q_t.block<3,3>(6,0) = (1/p_noise_sigma) * (0.5*dt_*dt_) * Skew(q_t0.toRotationMatrix() * p_diff);
       }  
 
       // velocity_t

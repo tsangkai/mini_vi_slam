@@ -58,8 +58,20 @@ Eigen::Matrix3d Exp(Eigen::Vector3d omega) {
 
     return Eigen::Matrix3d::Identity() + sin(omega_norm) * hatted_omega + (1 - cos(omega_norm)) * hatted_omega * hatted_omega;
   }
+}
+
+
+Eigen::Vector3d Log(Eigen::Matrix3d R) {
+
+  if (R.norm() < eps) {
+    return Eigen::Vector3d(R(2,1), R(0,2), R(1,0));
+  }
+  else {
+    return Eigen::Vector3d(log(R(2,1)), log(R(0,2)), log(R(1,0)));
+  }
 
 }
+
 
 // [Sola] (101)
 // [Bloesch et al] (38)

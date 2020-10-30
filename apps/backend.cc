@@ -203,7 +203,10 @@ class ExpLandmarkOptSLAM {
 
     cu_ = experiment_config_file["cameras"][0]["principal_point"][0];
     cv_ = experiment_config_file["cameras"][0]["principal_point"][1];
-    
+
+    sigma_g_c_ = experiment_config_file["imu_params"]["sigma_g_c"];
+    sigma_a_c_ = experiment_config_file["imu_params"]["sigma_a_c"];    
+
     return true;
   }
 
@@ -639,6 +642,9 @@ class ExpLandmarkOptSLAM {
   // parameter containers
   std::vector<State*>                state_parameter_;
   std::vector<Vec3dParameterBlock*>  landmark_parameter_;
+
+  double sigma_g_c_;   // gyro noise density [rad/s/sqrt(Hz)]
+  double sigma_a_c_;   //  accelerometer noise density [m/s^2/sqrt(Hz)]
 
   double accel_bias_parameter_[3];
   double gyro_bias_parameter_[3];
