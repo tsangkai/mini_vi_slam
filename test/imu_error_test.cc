@@ -116,11 +116,6 @@ int main(int argc, char **argv) {
                       m_a_W_z);
 
 
-  // Build the problem.
-  ceres::Problem optimization_problem;
-  ceres::LocalParameterization* quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
-
-
   // starting states
   Transformation T_WS;
   T_WS.SetRandom(10.0, M_PI);
@@ -129,18 +124,6 @@ int main(int argc, char **argv) {
   Eigen::Quaterniond q0 = T_WS.q();
   Eigen::Vector3d    v0(0.1, 0.1, 0.1);  
   Eigen::Vector3d    p0 = T_WS.t();
-
-  
-
-  for (size_t j=0; j<step; ++j) {
-
-  }
-
-
-
-
-
-
 
 
 
@@ -175,10 +158,13 @@ int main(int argc, char **argv) {
   //=========================================================================================================
 
 
+  // Build the problem.
+  ceres::Problem optimization_problem;
+  ceres::LocalParameterization* quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
 
   // create the pose parameter blocks
   Transformation T_disturb;
-  T_disturb.SetRandom(1, 0.2);
+  T_disturb.SetRandom(10, 0.2);
   Transformation T_WS_1_disturbed = Transformation(q1, p1) * T_disturb;
   Eigen::Vector3d v1_disturbed = v1 + 5*Eigen::Vector3d::Random();
 

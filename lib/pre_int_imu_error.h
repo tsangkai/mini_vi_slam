@@ -18,6 +18,9 @@
 #include "so3.h"
 
 
+
+
+
 /// \brief Implements a nonlinear IMU factor.
 class PreIntImuError :
     public ceres::SizedCostFunction<9,     // number of residuals
@@ -40,7 +43,7 @@ class PreIntImuError :
   static const int kNumResiduals = 9;
 
   /// \brief The type of the covariance.
-  // typedef Eigen::Matrix<double, 15, 15> covariance_t;
+  typedef Eigen::Matrix<double, 9, 9> covariance_t;
 
   /// \brief The type of the information (same matrix dimension as covariance).
   // typedef covariance_t information_t;
@@ -64,15 +67,18 @@ class PreIntImuError :
   }
 
   /// 
-  PreIntImuError(const Eigen::Matrix3d d_rotation,
+  PreIntImuError(const double dt,
+                 const Eigen::Matrix3d d_rotation,
                  const Eigen::Vector3d d_velocity,
                  const Eigen::Vector3d d_position,
-                 const double dt) {
-
-    d_rotation_ = d_rotation;
-    d_velocity_ = d_velocity;
-    d_position_ = d_position;
+                 const covariance_t cov = covariance_t::Identity()) {
     dt_ = dt;
+
+    dR_ = d_rotation;
+    dv_ = d_velocity;
+    dp_ = d_position;
+
+    cov_ = cov;
   }
 
 
@@ -88,29 +94,39 @@ class PreIntImuError :
                 double* residuals,
                 double** jacobians) const {
 
-    Eigen::Quaterniond rotation_t1(parameters[0][0], parameters[0][1], parameters[0][2], parameters[0][3]);
-    Eigen::Vector3d velocity_t1(parameters[1]);
-    Eigen::Vector3d position_t1(parameters[2]);
-    Eigen::Quaterniond rotation_t(parameters[3][0], parameters[3][1], parameters[3][2], parameters[3][3]);
-    Eigen::Vector3d velocity_t(parameters[4]);
-    Eigen::Vector3d position_t(parameters[5]);
+    Eigen::Quaterniond q_t1(parameters[0][0], parameters[0][1], parameters[0][2], parameters[0][3]);
+    Eigen::Vector3d v_t1(parameters[1]);
+    Eigen::Vector3d p_t1(parameters[2]);
+    Eigen::Quaterniond q_t0(parameters[3][0], parameters[3][1], parameters[3][2], parameters[3][3]);
+    Eigen::Vector3d v_t0(parameters[4]);
+    Eigen::Vector3d p_t0(parameters[5]);
 
+    // TODO: define globally
     Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);
-    Eigen::Vector3d gyro_bias = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
-    Eigen::Vector3d accel_bias = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
 
     // residual vectors
-    Eigen::Map<Eigen::Vector3d> r_rotation(residuals+0);
-    Eigen::Map<Eigen::Vector3d> r_velocity(residuals+3);      
-    Eigen::Map<Eigen::Vector3d> r_position(residuals+6);      
+    Eigen::Map<Eigen::Vector3d > r_q(residuals+0);      
+    Eigen::Map<Eigen::Vector3d > r_v(residuals+3);      
+    Eigen::Map<Eigen::Vector3d > r_p(residuals+6);
 
-    Eigen::Vector3d v_diff = velocity_t1 - velocity_t - dt_*gravity;
-    Eigen::Vector3d p_diff = position_t1 - position_t - dt_*velocity_t - 0.5*(dt_*dt_)*gravity;
+    r_q = Log((q_t0.toRotationMatrix()*dR_).transpose() * q_t1);
+    r_v = v_t1 - (q_t0.toRotationMatrix()*dv_ + v_t0 + gravity*dt_);
+    r_p = p_t1 - (q_t0.toRotationMatrix()*dp_ + p_t0 + v_t0*dt_ + 0.5*gravity*dt_*dt_);
 
-    r_rotation = Log_q(rotation_t1.conjugate() * (rotation_t * Eigen::Quaterniond(d_rotation_)));
-    r_velocity = d_velocity_ - rotation_t.toRotationMatrix().transpose() * v_diff; 
-    r_position = d_position_ - rotation_t.toRotationMatrix().transpose() * p_diff; 
+    // covariance
+    covariance_t delta_2_residual;
+    delta_2_residual.setZero();
+    delta_2_residual.block<3,3>(0,0) = (-1) * dR_;
+    delta_2_residual.block<3,3>(3,3) = (-1) * q_t0.toRotationMatrix();
+    delta_2_residual.block<3,3>(6,6) = (-1) * q_t0.toRotationMatrix();
 
+    Eigen::LLT<covariance_t> lltOfInformation(cov_.inverse());
+    covariance_t squareRootInformation_ = delta_2_residual * lltOfInformation.matrixL().transpose();
+
+    // weight
+    r_q = squareRootInformation_.block<3,3>(0,0) * r_q;
+    r_v = squareRootInformation_.block<3,3>(3,3) * r_v;
+    r_p = squareRootInformation_.block<3,3>(6,6) * r_p;
 
     /*********************************************************************************
 
@@ -125,7 +141,9 @@ class PreIntImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t1(jacobians[0]);      
         J_q_t1.setZero();
 
-        J_q_t1.block<3,3>(0,1) = Eigen::Matrix3d::Identity();
+        Eigen::Matrix<double, 3, 3> J_res_q_2_q1 = LeftJacobianInv(r_q) * (q_t0.toRotationMatrix()*dR_).transpose();
+      
+        J_q_t1.block<3,4>(0,0) = squareRootInformation_.block<3,3>(0,0) * J_res_q_2_q1 * QuatLiftJacobian(q_t1);
       }  
 
       // velocity_t1
@@ -134,7 +152,9 @@ class PreIntImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_v_t1(jacobians[1]);
         J_v_t1.setZero();
 
-        J_v_t1.block<3,3>(3,0) = (-1) * rotation_t.toRotationMatrix().transpose();
+        Eigen::Matrix<double, 3, 3> J_res_v_2_v1 = Eigen::Matrix3d::Identity();
+
+        J_v_t1.block<3,3>(3,0) = squareRootInformation_.block<3,3>(3,3) * J_res_v_2_v1;
       }  
 
       // position_t1
@@ -142,35 +162,46 @@ class PreIntImuError :
         Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_p_t1(jacobians[2]);      
         J_p_t1.setZero();
 
-        J_p_t1.block<3,3>(6,0) = (-1) * rotation_t.toRotationMatrix().transpose();
+        Eigen::Matrix<double, 3, 3> J_res_v_2_p1 = Eigen::Matrix3d::Identity();
+
+        J_p_t1.block<3,3>(6,0) = squareRootInformation_.block<3,3>(6,6) * J_res_v_2_p1;
       }
 
       // rotation_t
       if (jacobians[3] != NULL) {
-        Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t(jacobians[3]);      
-        J_q_t.setZero();
+        Eigen::Map<Eigen::Matrix<double, 9, 4, Eigen::RowMajor> > J_q_t0(jacobians[3]);      
+        J_q_t0.setZero();
 
-        J_q_t.block<3,3>(0,1) = rotation_t1.toRotationMatrix().transpose();
-        J_q_t.block<3,3>(3,1) = (-1) * rotation_t1.toRotationMatrix().transpose() * Skew(v_diff);
-        J_q_t.block<3,3>(6,1) = (-1) * rotation_t1.toRotationMatrix().transpose() * Skew(p_diff);
+        Eigen::Matrix<double, 3, 3> J_res_q_2_q0 = LeftJacobianInv(r_q) * (-1) * (q_t0.toRotationMatrix()*dR_).transpose();
+        Eigen::Matrix<double, 3, 3> J_res_v_2_q0 = (-1) * q_t0.toRotationMatrix().transpose() * Skew(dv_);
+        Eigen::Matrix<double, 3, 3> J_res_p_2_q0 = (-1) * q_t0.toRotationMatrix().transpose() * Skew(dp_);
+
+        J_q_t0.block<3,4>(0,0) = squareRootInformation_.block<3,3>(0,0) * J_res_q_2_q0 * QuatLiftJacobian(q_t0);
+        J_q_t0.block<3,4>(3,0) = squareRootInformation_.block<3,3>(3,3) * J_res_v_2_q0 * QuatLiftJacobian(q_t0);
+        J_q_t0.block<3,4>(6,0) = squareRootInformation_.block<3,3>(6,6) * J_res_p_2_q0 * QuatLiftJacobian(q_t0);
       }  
 
 
       // velocity_t
       if (jacobians[4] != NULL) {
-        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_v_t(jacobians[4]);
-        J_v_t.setZero();
+        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_v_t0(jacobians[4]);
+        J_v_t0.setZero();
 
-        J_v_t.block<3,3>(3,0) = rotation_t.toRotationMatrix().transpose();
-        J_v_t.block<3,3>(6,0) = dt_ * rotation_t.toRotationMatrix().transpose();
+        Eigen::Matrix<double, 3, 3> J_res_v_2_v0 = (-1) * Eigen::Matrix3d::Identity();
+        Eigen::Matrix<double, 3, 3> J_res_p_2_v0 = (-dt_) * Eigen::Matrix3d::Identity();
+
+        J_v_t0.block<3,3>(3,0) = squareRootInformation_.block<3,3>(3,3) * J_res_v_2_v0;
+        J_v_t0.block<3,3>(6,0) = squareRootInformation_.block<3,3>(6,6) * J_res_p_2_v0;
       }  
 
       // position_t
       if (jacobians[5] != NULL) {
-        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_p_t(jacobians[5]);      
-        J_p_t.setZero();
+        Eigen::Map<Eigen::Matrix<double, 9, 3, Eigen::RowMajor> > J_p_t0(jacobians[5]);      
+        J_p_t0.setZero();
 
-        J_p_t.block<3,3>(3,0) = rotation_t.toRotationMatrix().transpose();
+        Eigen::Matrix<double, 3, 3> J_res_v_2_p0 = (-1) * Eigen::Matrix3d::Identity();
+
+        J_p_t0.block<3,3>(6,0) = squareRootInformation_.block<3,3>(6,6) * J_res_v_2_p0;
       }
     }
 
@@ -203,13 +234,15 @@ class PreIntImuError :
 
  protected:
 
-  // measurements
-  Eigen::Matrix3d d_rotation_;
-  Eigen::Vector3d d_velocity_;
-  Eigen::Vector3d d_position_;
-
   // times
   double dt_;
+  
+  // measurements
+  Eigen::Matrix3d dR_;
+  Eigen::Vector3d dv_;
+  Eigen::Vector3d dp_;
+
+  covariance_t cov_;
 
 };
 

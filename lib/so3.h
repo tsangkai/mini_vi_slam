@@ -61,15 +61,28 @@ Eigen::Matrix3d Exp(Eigen::Vector3d omega) {
 }
 
 
+
+
+// from ORB SLAM 3
 Eigen::Vector3d Log(Eigen::Matrix3d R) {
 
-  if (R.norm() < eps) {
-    return Eigen::Vector3d(R(2,1), R(0,2), R(1,0));
-  }
-  else {
-    return Eigen::Vector3d(log(R(2,1)), log(R(0,2)), log(R(1,0)));
-  }
+    double tr = R(0,0)+R(1,1)+R(2,2);
+    Eigen::Vector3d w;
+    w  << 0.5 * (R(2,1)-R(1,2)),
+          0.5 * (R(0,2)-R(2,0)),
+          0.5 * (R(1,0)-R(0,1));
 
+    double costheta = (tr-1.0f)*0.5f;
+
+    if(costheta>1 || costheta<-1)
+        return w;
+
+    const double theta = acos(costheta);
+    const double s = sin(theta);
+    if(fabs(s)<eps)
+        return w;
+    else
+        return theta*w/s;
 }
 
 
