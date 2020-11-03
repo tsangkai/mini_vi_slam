@@ -1,4 +1,4 @@
-add_library(backend_lib STATIC
+add_library(lib STATIC
   so3.h
   parameter_block.h
   sized_parameter_block.h
@@ -9,11 +9,11 @@ add_library(backend_lib STATIC
   reprojection_error.h
 )
 
-target_include_directories(backend_lib
+target_include_directories(lib
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
-target_link_libraries(backend_lib
+target_link_libraries(lib
   PRIVATE ${EIGEN3_LIBS}
   PRIVATE ceres  
 )

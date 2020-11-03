@@ -12,6 +12,7 @@
 #include <opencv2/core/core.hpp>
 #include <Eigen/Core>
 
+
 #include "so3.h"
 #include "vec_3d_parameter_block.h"
 #include "quat_parameter_block.h"
@@ -20,11 +21,8 @@
 #include "reprojection_error.h"
 
 
-
-// TODO: initialized from config files
+// TODO: move this term to somewhere else
 Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
-Eigen::Vector3d bias_gyr = Eigen::Vector3d(-0.003196, 0.021298, 0.078430);
-Eigen::Vector3d bias_acc = Eigen::Vector3d(-0.026176, 0.137568, 0.076295);
 
 // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
@@ -33,6 +31,8 @@ double ConverStrTime(std::string time_str) {
 
   return std::stoi(time_str_sec) + std::stoi(time_str_nano_sec)*1e-9;
 }
+
+
 
 struct IMUData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -137,7 +137,6 @@ struct PreIntIMUData {
 
   Eigen::Matrix<double, 9, 9> cov_;
 };
-
 
 struct ObservationData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -289,6 +288,7 @@ Eigen::Vector3d EpipolarInitialize(Eigen::Vector2d keypoint1, Eigen::Quaterniond
   return vec.head(3) / vec(3);
 }
 
+
 class ExpLandmarkOptSLAM {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
@@ -298,6 +298,10 @@ class ExpLandmarkOptSLAM {
     ReadConfigurationFiles(config_folder_path);
 
     quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
+
+    bias_gyr_.setZero();
+    bias_acc_.setZero();
+
   }
 
   bool ReadConfigurationFiles(std::string config_folder_path) {
@@ -306,8 +310,6 @@ class ExpLandmarkOptSLAM {
     cv::FileStorage test_config_file(config_folder_path + "test.yaml", cv::FileStorage::READ);
     time_begin_ = ConverStrTime(test_config_file["time_window"][0]);  
     time_end_ = ConverStrTime(test_config_file["time_window"][1]);  
-
-    tri_max_num_iterations_ = (int)(test_config_file["backend"]["tri_max_num_iterations"]);
 
     // experiment configuration file
     cv::FileStorage experiment_config_file(config_folder_path + "config_fpga_p2_euroc.yaml", cv::FileStorage::READ);
@@ -480,6 +482,7 @@ class ExpLandmarkOptSLAM {
     output_file << "timestamp,p_x,p_y,p_z,q_w,q_x,q_y,q_z,v_x,v_y,v_z,b_w_x,b_w_y,b_w_z,b_a_x,b_a_y,b_a_z\n";
 
     size_t state_idx = 0;
+    double num = 0.0;
 
 
     while (std::getline(input_file, line)) {
@@ -497,6 +500,8 @@ class ExpLandmarkOptSLAM {
           else if (ground_truth_timestamp < state_parameter_.at(state_idx+1)->GetTimestamp()) {
           }
           else {
+            num = num + 1;
+
             // output 
             std::string data;
             output_file << std::to_string(ground_truth_timestamp);
@@ -515,13 +520,27 @@ class ExpLandmarkOptSLAM {
               output_file << data;
             }
             
-            // bias
-            for (int i=0; i<6; ++i) {                    
-              std::getline(s_stream, data, ',');
+            // gyro bias
+            std::string b_gyr[3];
+            for (int i=0; i<3; ++i) {                    
+              std::getline(s_stream, b_gyr[i], ',');
 
               output_file << ",";
-              output_file << data;
+              output_file << b_gyr[i];
             }
+            bias_gyr_ = (1 - 1/num) * bias_gyr_ + (1/num) * Eigen::Vector3d(std::stod(b_gyr[0]), std::stod(b_gyr[1]), std::stod(b_gyr[2]));
+
+
+            // acce bias
+            std::string b_acc[3];
+            for (int i=0; i<3; ++i) {                    
+              std::getline(s_stream, b_acc[i], ',');
+
+              output_file << ",";
+              output_file << b_acc[i];
+            }
+            bias_acc_ = (1 - 1/num) * bias_acc_ + (1/num) * Eigen::Vector3d(std::stod(b_acc[0]), std::stod(b_acc[1]), std::stod(b_acc[2]));
+
 
             output_file << std::endl;
 
@@ -556,8 +575,8 @@ class ExpLandmarkOptSLAM {
     std::vector<IMUData> imu_data_vec;
     size_t state_idx = 0;                 // the index of the last element
 
-    PreIntIMUData int_imu_data(bias_gyr,
-                               bias_acc,
+    PreIntIMUData int_imu_data(bias_gyr_,
+                               bias_acc_,
                                sigma_g_c_,
                                sigma_a_c_);
     
@@ -574,14 +593,13 @@ class ExpLandmarkOptSLAM {
 
       if (time_begin_ <= imu_data.timestamp_ && imu_data.timestamp_ <= time_end_) {
 
-
         Eigen::Vector3d acc_measurement = imu_data.acc_;
         Eigen::Vector3d gyr_measurement = imu_data.gyr_;      
-        Eigen::Vector3d accel_plus_gravity = rotation_dr.toRotationMatrix()*(imu_data.acc_ - bias_acc) + gravity;
+        Eigen::Vector3d accel_plus_gravity = rotation_dr.toRotationMatrix()*(imu_data.acc_ - bias_acc_) + gravity;
         
         position_dr = position_dr + imu_dt_*velocity_dr + 0.5*(imu_dt_*imu_dt_)*accel_plus_gravity;
         velocity_dr = velocity_dr + imu_dt_*accel_plus_gravity;
-        rotation_dr = rotation_dr * Exp_q(imu_dt_*(gyr_measurement-bias_gyr));
+        rotation_dr = rotation_dr * Exp_q(imu_dt_*(gyr_measurement-bias_gyr_));
 
 
         // starting to put imu data in the previously established state_parameter_
@@ -617,14 +635,14 @@ class ExpLandmarkOptSLAM {
 
           state_idx++;
           
-          // dead-reckoning to initialize 
+          // dead-reckoning to initialize states
           state_parameter_.at(state_idx)->GetRotationBlock()->setEstimate(rotation_dr);
           state_parameter_.at(state_idx)->GetVelocityBlock()->setEstimate(velocity_dr);
           state_parameter_.at(state_idx)->GetPositionBlock()->setEstimate(position_dr);
 
           // prepare for next iteration
-          int_imu_data = PreIntIMUData(bias_gyr,
-                                       bias_acc,
+          int_imu_data = PreIntIMUData(bias_gyr_,
+                                       bias_acc_,
                                        sigma_g_c_,
                                        sigma_a_c_);
 
@@ -676,7 +694,6 @@ class ExpLandmarkOptSLAM {
                                                                  fu_, fv_,
                                                                  cu_, cv_,
                                                                  observation_data.cov());
-      
 
       optimization_problem_.AddResidualBlock(cost_function,
                                              NULL,
@@ -766,12 +783,10 @@ class ExpLandmarkOptSLAM {
   // testing parameters
   double time_begin_;
   double time_end_;
-  int tri_max_num_iterations_;
 
   // experiment parameters
   double imu_dt_;
 
-  // Eigen::Transform<double, 3, Eigen::Affine> T_bc_;
   Eigen::Matrix4d T_bc_;
   double fu_;   // focal length u
   double fv_;
@@ -782,13 +797,13 @@ class ExpLandmarkOptSLAM {
   std::vector<State*>                state_parameter_;
   std::vector<Vec3dParameterBlock*>  landmark_parameter_;
 
-  std::vector<ObservationData>      observation_data_;
+  std::vector<ObservationData>       observation_data_;
 
   double sigma_g_c_;   // gyro noise density [rad/s/sqrt(Hz)]
   double sigma_a_c_;   // accelerometer noise density [m/s^2/sqrt(Hz)]
 
-  // double accel_bias_parameter_[3];
-  // double gyro_bias_parameter_[3];
+  Eigen::Vector3d bias_gyr_;
+  Eigen::Vector3d bias_acc_;
 
   // ceres parameter
   ceres::LocalParameterization* quat_parameterization_ptr_;
@@ -800,8 +815,6 @@ class ExpLandmarkOptSLAM {
 
 
 int main(int argc, char **argv) {
-
-  // srand((unsigned int) time(0)); // disabled: make unit tests deterministic...
 
   google::InitGoogleLogging(argv[0]);
 

@@ -10,13 +10,6 @@ find_package(Eigen3 REQUIRED)
 find_package(Ceres REQUIRED)
 
 
-
-include(CTest)
-
-
 add_subdirectory(apps)
-
 add_subdirectory(lib)
-
-
 add_subdirectory(test)

@@ -15,7 +15,6 @@
 
 #define _USE_MATH_DEFINES
 
-
 struct IMUData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
