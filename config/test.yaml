@@ -7,5 +7,4 @@ time_window: ["1403636649313555456", "1403636658963555584"]   # initial trial
 frontend:
   downsample_rate: 8
   landmark_obs_count_threshold: 4
-
-backend:
+  
