@@ -52,11 +52,11 @@ class FeatureNode {
     return landmark_id_;
   }
 
-  void SetLandmarkId(size_t new_landmark_id) {
+  void SetLandmarkId(const size_t new_landmark_id) {
     landmark_id_ = new_landmark_id;
   }  
 
-  bool AssignLandmarkId(size_t input_landmark_id) {
+  bool AssignLandmarkId(const size_t input_landmark_id) {
     if (input_landmark_id == 0) {
       std::cout << "invalid landmark id." << std::endl;
       return false;
@@ -74,11 +74,24 @@ class FeatureNode {
       return true;
     }
     else {   // input_landmark_id != landmark_id_ && landmark_id_ != 0
-      std::cout << "I don't know what happen!" << std::endl;
+      std::cout << "The same landmark is assigned 2 different id." << std::endl;
       return false;
     }
-
   }
+
+  bool ResetLandmarkId() {
+    if (landmark_id_ == 0) {
+      return true;
+    }
+    else {
+      landmark_id_ = 0;
+
+      for (auto neighbor_ptr: neighbors_) {
+        neighbor_ptr->ResetLandmarkId();
+      }
+      return true;
+    }
+  }  
 
  private:
   size_t landmark_id_;
@@ -96,7 +109,6 @@ class Frontend {
     time_window_begin_ = std::string(config_file["time_window"][0]);
     time_window_end_ = std::string(config_file["time_window"][1]);
     downsample_rate_ = (size_t)(int)(config_file["frontend"]["downsample_rate"]);
-    landmark_obs_count_threshold_ = (int)(config_file["frontend"]["landmark_obs_count_threshold"]);
 
     std::cout << "Consider from " << time_window_begin_ << " to " << time_window_end_ << ": " << std::endl;
   }
@@ -232,30 +244,46 @@ class Frontend {
       }
     }
 
+    // remove landmark id that appears twice in a single image
+    for (size_t i=0; i<num_of_images; i++) {
+      std::vector<size_t> landmark_count_vec(landmark_count, 0);
 
-    // count the number of observations for each landmark/feature
-    std::vector<size_t> landmark_obs_count(landmark_count, 0);
+      for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
+        size_t landmark_id_temp = landmark_id_table_.at(i).at(k)->GetLandmarkId();
+        if (landmark_id_temp > 0) {
+          landmark_count_vec.at(landmark_id_temp-1)++;
+        }
+      }
 
+      for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
+        size_t landmark_id_temp = landmark_id_table_.at(i).at(k)->GetLandmarkId();
+        if (landmark_id_temp > 0 && landmark_count_vec.at(landmark_id_temp-1) > 1) {
+
+          landmark_id_table_.at(i).at(k)->ResetLandmarkId();
+          landmark_count_vec.at(landmark_id_temp-1) = 0;
+        }
+      }
+    }
+
+    // assign new id to those landmarks
+    std::vector<size_t> landmark_id_2_id_table(landmark_count, 0);
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
         
         size_t temp_landmark_id = landmark_id_table_.at(i).at(k)->GetLandmarkId();
         if (temp_landmark_id > 0) {
-          landmark_obs_count.at(temp_landmark_id-1)++;
+          landmark_id_2_id_table.at(temp_landmark_id-1) = 1;
         }
       }
     }
 
-    // keep only those landmarks observed often
     size_t landmark_count_after_threshold = 0;
-    std::vector<size_t> landmark_id_2_id_table(landmark_count, 0);
-
     for (size_t i=0; i<landmark_count; i++) {
-      if (landmark_obs_count.at(i) > landmark_obs_count_threshold_) {
+      if (landmark_id_2_id_table.at(i) > 0) {
         landmark_count_after_threshold++;
         landmark_id_2_id_table.at(i) = landmark_count_after_threshold;
       }
-    }
+    }    
 
     for (size_t i=0; i<num_of_images; i++) {
       for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
@@ -266,6 +294,26 @@ class Frontend {
         }
       }
     }
+
+
+    // CHECK: assign the same landmark id to different feature points in a single image
+    for (size_t i=0; i<num_of_images; i++) {
+      std::vector<size_t> landmark_count_vec(landmark_count, 0);
+
+      for (size_t k=0; k<image_keypoints_.at(i).size(); k++) {
+        size_t landmark_id_temp = landmark_id_table_.at(i).at(k)->GetLandmarkId();
+        if (landmark_id_temp > 0) {
+          landmark_count_vec.at(landmark_id_temp-1)++;
+        }
+      }
+
+      for (size_t j=0; j<landmark_count; ++j) {
+        if (landmark_count_vec.at(j) > 1) {
+          std::cout << "Image " << i << ": " << "landmark id " << j+1 << " is observed " << landmark_count_vec.at(j) << "times" << std::endl;
+        }
+      }
+    }
+
 
     std::cout << "total landmark counts: " << landmark_count << std::endl;
     std::cout << "total landmark counts after thresholding observed number: " << landmark_count_after_threshold << std::endl;
@@ -307,7 +355,6 @@ class Frontend {
   std::string time_window_begin_;
   std::string time_window_end_;
   size_t downsample_rate_;
-  int landmark_obs_count_threshold_;
 
   std::vector<std::string>                  image_names_;
   std::vector<TimedImageData>               image_data_;       
@@ -315,7 +362,7 @@ class Frontend {
   std::vector<std::vector<cv::KeyPoint>>    image_keypoints_;
   std::vector<cv::Mat>                      image_descriptions_;           
 
-  std::vector<std::vector<FeatureNode*>>    landmark_id_table_;
+  std::vector<std::vector<FeatureNode*>>    landmark_id_table_;       // [image id][keypoint id]
 };
 
 int main(int argc, char **argv) {
@@ -323,7 +370,7 @@ int main(int argc, char **argv) {
   /*** Step 0. Read configuration file ***/
 
   std::string config_folder_path("../config/");
-  Frontend frontend(config_folder_path);                     // read configuration file
+  Frontend frontend(config_folder_path);                              // read configuration file
 
 
   /*** Step 1. Read image files ***/
