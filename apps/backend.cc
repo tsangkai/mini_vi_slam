@@ -298,6 +298,7 @@ class ExpLandmarkOptSLAM {
     ReadConfigurationFiles(config_folder_path);
 
     quat_parameterization_ptr_ = new ceres::QuaternionParameterization();
+    loss_function_ptr_ = new ceres::HuberLoss(1.0);
 
     bias_gyr_.setZero();
     bias_acc_.setZero();
@@ -553,6 +554,10 @@ class ExpLandmarkOptSLAM {
     input_file.close();
     output_file.close();
 
+    std::cout << "gyro bias: " << bias_gyr_ << std::endl;
+    std::cout << "accl bias: " << bias_acc_ << std::endl;
+
+
     return true;
   }    
 
@@ -732,7 +737,9 @@ class ExpLandmarkOptSLAM {
     optimization_options_.minimizer_progress_to_stdout = true;
     optimization_options_.num_threads = 6;
     optimization_options_.function_tolerance = 1e-9;
+    optimization_options_.parameter_tolerance = 1e-10;
     optimization_options_.max_num_iterations = 100;
+
 
     ceres::Solve(optimization_options_, &optimization_problem_, &optimization_summary_);
     std::cout << optimization_summary_.FullReport() << "\n";
@@ -807,6 +814,7 @@ class ExpLandmarkOptSLAM {
 
   // ceres parameter
   ceres::LocalParameterization* quat_parameterization_ptr_;
+  ceres::LossFunction* loss_function_ptr_;
 
   ceres::Problem optimization_problem_;
   ceres::Solver::Options optimization_options_;
