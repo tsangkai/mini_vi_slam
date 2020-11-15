@@ -6,12 +6,134 @@
 #include <algorithm>
 
 #include <boost/filesystem.hpp>
+
+#include <Eigen/Core>
+#include <Eigen/LU>
+
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/features2d.hpp>
 #include <opencv2/calib3d.hpp>
 
+class Camera {
+
+ public:
+  Camera(double fu, double fv, double pu, double pv,
+         double dis_para_0, double dis_para_1, double dis_para_2, double dis_para_3) {
+    fu_ = fu;
+    fv_ = fv;
+
+    pu_ = pu;
+    pv_ = pv;
+
+    k1_ = dis_para_0;
+    k2_ = dis_para_1;
+    p1_ = dis_para_2;
+    p2_ = dis_para_3;
+  }
+
+  Eigen::Vector2d ScaleAndShift(Eigen::Vector2d point) {
+    Eigen::Vector2d return_point;
+
+    return_point[0] = fu_ * point[0] + pu_;
+    return_point[1] = fv_ * point[1] + pv_;
+
+    return return_point;
+  }
+
+  Eigen::Vector2d UnScaleAndShift(Eigen::Vector2d point) {
+    Eigen::Vector2d return_point;
+
+    return_point[0] = (point[0] - pu_) / fu_;
+    return_point[1] = (point[1] - pv_) / fv_;
+
+    return return_point;
+  }
+
+  bool Distort(const Eigen::Vector2d & pointUndistorted, Eigen::Vector2d * pointDistorted,
+    Eigen::Matrix2d * pointJacobian) const {
+
+    // first compute the distorted point
+    const double u0 = pointUndistorted[0];
+    const double u1 = pointUndistorted[1];
+    const double mx_u = u0 * u0;
+    const double my_u = u1 * u1;
+    const double mxy_u = u0 * u1;
+    const double rho_u = mx_u + my_u;
+    const double rad_dist_u = k1_ * rho_u + k2_ * rho_u * rho_u;
+    (*pointDistorted)[0] = u0 + u0 * rad_dist_u + 2.0 * p1_ * mxy_u
+      + p2_ * (rho_u + 2.0 * mx_u);
+    (*pointDistorted)[1] = u1 + u1 * rad_dist_u + 2.0 * p2_ * mxy_u
+      + p1_ * (rho_u + 2.0 * my_u);
+
+    // next the Jacobian w.r.t. changes on the undistorted point
+    Eigen::Matrix2d & J = *pointJacobian;
+    J(0, 0) = 1 + rad_dist_u + k1_ * 2.0 * mx_u + k2_ * rho_u * 4 * mx_u
+      + 2.0 * p1_ * u1 + 6 * p2_ * u0;
+    J(1, 0) = k1_ * 2.0 * u0 * u1 + k2_ * 4 * rho_u * u0 * u1 + p1_ * 2.0 * u0
+      + 2.0 * p2_ * u1;
+    J(0, 1) = J(1, 0);
+    J(1, 1) = 1 + rad_dist_u + k1_ * 2.0 * my_u + k2_ * rho_u * 4 * my_u
+      + 6 * p1_ * u1 + 2.0 * p2_ * u0;
+
+
+    return true;
+  
+  }
+
+  bool UnDistort(const Eigen::Vector2d & pointDistorted,
+                     Eigen::Vector2d * pointUndistorted) const {
+
+    // this is expensive: we solve with Gauss-Newton...
+    Eigen::Vector2d x_bar = pointDistorted; // initialise at distorted point
+    const int n = 15;  // just 5 iterations max.
+    Eigen::Matrix2d E;  // error Jacobian
+
+    bool success = false;
+    for (int i = 0; i < n; i++) {
+
+      Eigen::Vector2d x_tmp;
+
+      Distort(x_bar, &x_tmp, &E);
+
+      Eigen::Vector2d e(pointDistorted - x_tmp);
+      Eigen::Matrix2d E2 = (E.transpose() * E);
+      Eigen::Vector2d du = E2.inverse() * E.transpose() * e;
+
+      x_bar += du;
+
+      const double chi2 = e.dot(e);
+      if (chi2 < 1e-4) {
+        success = true;
+      }
+      if (chi2 < 1e-15) {
+        success = true;
+        break;
+      }
+
+    }
+    *pointUndistorted = x_bar;
+
+    if(!success){
+      std::cout<<(E.transpose() * E)<<std::endl;
+    }
+
+    return success;
+  }
+
+ private:
+  double fu_;
+  double fv_;
+  double pu_;
+  double pv_;
+
+  double k1_;
+  double k2_;
+  double p1_;
+  double p2_;
+
+};
 
 class TimedImageData {
  public:
@@ -104,13 +226,26 @@ class Frontend {
   Frontend(std::string config_folder_path) {
   
     std::string config_file_path = config_folder_path + "test.yaml";
-    cv::FileStorage config_file(config_file_path, cv::FileStorage::READ);
+    cv::FileStorage test_config_file(config_file_path, cv::FileStorage::READ);
 
-    time_window_begin_ = std::string(config_file["time_window"][0]);
-    time_window_end_ = std::string(config_file["time_window"][1]);
-    downsample_rate_ = (size_t)(int)(config_file["frontend"]["downsample_rate"]);
+    time_window_begin_ = std::string(test_config_file["time_window"][0]);
+    time_window_end_ = std::string(test_config_file["time_window"][1]);
+    downsample_rate_ = (size_t)(int)(test_config_file["frontend"]["downsample_rate"]);
 
     std::cout << "Consider from " << time_window_begin_ << " to " << time_window_end_ << ": " << std::endl;
+
+
+    cv::FileStorage experiment_config_file(config_folder_path + "config_fpga_p2_euroc.yaml", cv::FileStorage::READ);
+
+    camera_ptr = new Camera((double) experiment_config_file["cameras"][0]["focal_length"][0], 
+                            (double) experiment_config_file["cameras"][0]["focal_length"][1],
+                            (double) experiment_config_file["cameras"][0]["principal_point"][0],
+                            (double) experiment_config_file["cameras"][0]["principal_point"][1],
+                            (double) experiment_config_file["cameras"][0]["distortion_coefficients"][0],
+                            (double) experiment_config_file["cameras"][0]["distortion_coefficients"][1],
+                            (double) experiment_config_file["cameras"][0]["distortion_coefficients"][2],
+                            (double) experiment_config_file["cameras"][0]["distortion_coefficients"][3]);
+
   }
 
   bool ReadImages(std::string image_folder_path) {
@@ -227,6 +362,9 @@ class Frontend {
 
         cv::imshow("Matches between " + std::to_string(i) + " and " + std::to_string(j), img_w_matches);
         cv::waitKey();
+
+        cv::imwrite("extraction.jpg", img_w_keypoints);
+
         ***/
       }
     }
@@ -335,12 +473,34 @@ class Frontend {
       for (size_t k=0; k<image_keypoints_.at(i).size(); ++k) {
 
         if (landmark_id_table_.at(i).at(k)->GetLandmarkId()!=0) {
-          
+
+          // 
+
+          Eigen::Vector2d distorted_point(image_keypoints_.at(i).at(k).pt.x, image_keypoints_.at(i).at(k).pt.y);
+          Eigen::Vector2d undistorted_point;
+          camera_ptr->UnDistort(camera_ptr->UnScaleAndShift(distorted_point), &undistorted_point);
+          Eigen::Vector2d corrected_point = camera_ptr->ScaleAndShift(undistorted_point);
+
+          // std::cout << distorted_point << std::endl;
+          // std::cout << corrected_point << std::endl << std::endl;
+
+          // 
+
+
+          /***
           std::string output_str = image_data_.at(i).GetTimestamp() + "," 
                                    + std::to_string(landmark_id_table_.at(i).at(k)->GetLandmarkId()) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).pt.y) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).size) + "\n";
+          ***/
+
+          std::string output_str = image_data_.at(i).GetTimestamp() + "," 
+                                   + std::to_string(landmark_id_table_.at(i).at(k)->GetLandmarkId()) + ","
+                                   + std::to_string(corrected_point[0]) + ","
+                                   + std::to_string(corrected_point[1]) + ","
+                                   + std::to_string(image_keypoints_.at(i).at(k).size) + "\n";
+
           output_file << output_str;
         }
       }
@@ -355,6 +515,8 @@ class Frontend {
   std::string time_window_begin_;
   std::string time_window_end_;
   size_t downsample_rate_;
+
+  Camera* camera_ptr;
 
   std::vector<std::string>                  image_names_;
   std::vector<TimedImageData>               image_data_;       

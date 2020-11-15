@@ -285,7 +285,7 @@ Eigen::Vector3d EpipolarInitialize(Eigen::Vector2d keypoint1, Eigen::Quaterniond
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
   Eigen::Vector4d vec = svd.matrixV().col(3);
 
-  return vec.head(3) / vec(3);
+  return vec.head(3) / vec(3) + 0.5*Eigen::Vector3d::Random();
 }
 
 
@@ -576,8 +576,6 @@ class ExpLandmarkOptSLAM {
     std::string first_line_data_str;
     std::getline(input_file, first_line_data_str);
 
-    // storage of IMU data
-    std::vector<IMUData> imu_data_vec;
     size_t state_idx = 0;                 // the index of the last element
 
     PreIntIMUData int_imu_data(bias_gyr_,
@@ -610,14 +608,10 @@ class ExpLandmarkOptSLAM {
         // starting to put imu data in the previously established state_parameter_
         // case 1: the time stamp of the imu data is after the last state
         if ((state_idx + 1) == state_parameter_.size()) {
-          imu_data_vec.push_back(imu_data);
-
           int_imu_data.IntegrateSingleIMU(imu_data, imu_dt_);
         }
         // case 2: the time stamp of the imu data is between two consecutive states
         else if (imu_data.timestamp_ < state_parameter_.at(state_idx+1)->GetTimestamp()) {
-          imu_data_vec.push_back(imu_data);
-
           int_imu_data.IntegrateSingleIMU(imu_data, imu_dt_);
         }
         // case 3: the imu data just enter the new interval of integration
@@ -701,7 +695,7 @@ class ExpLandmarkOptSLAM {
                                                                  observation_data.cov());
 
       optimization_problem_.AddResidualBlock(cost_function,
-                                             NULL,
+                                             loss_function_ptr_,
                                              state_parameter_.at(state_idx)->GetRotationBlock()->parameters(),
                                              state_parameter_.at(state_idx)->GetPositionBlock()->parameters(),
                                              landmark_parameter_.at(landmark_idx)->parameters());

@@ -5,11 +5,13 @@ add_executable(frontend frontend.cc)
 
 target_include_directories(frontend
   PUBLIC ${OpenCV_INCLUDE_DIRS}          # not the target style
+  PUBLIC ${EIGEN3_INCLUDE_DIR}
 )
 
 target_link_libraries(frontend
   PUBLIC Boost::filesystem
   PUBLIC Boost::system
+  PUBLIC ${EIGEN3_LIBS}
   PUBLIC ${OpenCV_LIBS}
 )
 
@@ -22,7 +24,6 @@ target_include_directories(backend
   PUBLIC ${EIGEN3_INCLUDE_DIR}
   PUBLIC ${CERES_INCLUDE_DIRS}     
   PUBLIC lib
-  PUBLIC util
 )
 
 target_link_libraries(backend
@@ -30,5 +31,4 @@ target_link_libraries(backend
   PUBLIC ${EIGEN3_LIBS}
   PUBLIC ceres
   PUBLIC lib
-  PUBLIC util
 )
