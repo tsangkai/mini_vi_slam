@@ -227,24 +227,21 @@ struct TriangularData {
   Eigen::Vector2d keypoint_;
 };
 
-Eigen::Vector3d EpipolarInitialize(Eigen::Vector2d keypoint1, Eigen::Quaterniond q1, Eigen::Vector3d p1_n1,
-                                   Eigen::Vector2d keypoint2, Eigen::Quaterniond q2, Eigen::Vector3d p2_n2,
+Eigen::Vector3d EpipolarInitialize(Eigen::Vector2d kp1, Eigen::Quaterniond q1, Eigen::Vector3d p1_n1,
+                                   Eigen::Vector2d kp2, Eigen::Quaterniond q2, Eigen::Vector3d p2_n2,
                                    Eigen::Matrix4d T_bc, 
                                    double fu, double fv,
                                    double cu, double cv) {
 
   Eigen::Matrix3d K;
-  K << fu,  0, 0,
-        0, fv, 0,
-        0,  0, 1;
+  K << fu,  0, cu,
+        0, fv, cv,
+        0,  0,  1;
 
   Eigen::Matrix<double, 3, 4> projection;
   projection << 1, 0, 0, 0,
                 0, 1, 0, 0,
                 0, 0, 1, 0;
-
-  Eigen::Vector2d kp1 = keypoint1 - Eigen::Vector2d(cu, cv);
-  Eigen::Vector2d kp2 = keypoint2 - Eigen::Vector2d(cu, cv);
 
   // from body frame to camera frame
   Eigen::Matrix3d R_bc = T_bc.topLeftCorner<3,3>();

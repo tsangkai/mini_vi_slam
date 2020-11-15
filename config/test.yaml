@@ -5,5 +5,5 @@ time_window: ["1403636649313555456", "1403636658963555584"]   # initial trial (n
 # time_window: ["1403636665000000000", "1403636722000000000"]     # from ground_truth_process, finally put in the paper
 
 frontend:
-  downsample_rate: 3  # 3, 8
+  downsample_rate: 5 # 3, 8
   

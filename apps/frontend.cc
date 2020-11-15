@@ -51,6 +51,17 @@ class Camera {
     return return_point;
   }
 
+
+  cv::Point2f UnScaleAndShift(cv::Point2f point) {
+    cv::Point2f return_point;
+
+    return_point.x = (point.x - pu_) / fu_;
+    return_point.y = (point.y - pv_) / fv_;
+
+    return return_point;
+  }
+
+
   bool Distort(const Eigen::Vector2d & pointUndistorted, Eigen::Vector2d * pointDistorted,
     Eigen::Matrix2d * pointJacobian) const {
 
@@ -354,6 +365,31 @@ class Frontend {
           }
         }  
 
+        // TEST: initialization from 8-point algorithm
+        if (j == i+1) {
+          std::cout << "matches between " << i << " and " << j << " = " << image_keypoint_matches.size() << std::endl;
+
+          size_t point_count = image_keypoint_matches.size();
+          std::vector<cv::Point2f> points_1(point_count);
+          std::vector<cv::Point2f> points_2(point_count);
+
+          for (size_t k=0; k<point_count; ++k) {
+            points_1[k] = camera_ptr->UnScaleAndShift(image_keypoints_.at(i)[image_keypoint_matches[k].queryIdx].pt);
+            points_2[k] = camera_ptr->UnScaleAndShift(image_keypoints_.at(j)[image_keypoint_matches[k].trainIdx].pt);
+          }
+
+          // cv::Mat fundamental_mat = cv::findFundamentalMat(points_1, points_2, cv::FM_RANSAC, 3, 0.99);
+          cv::Mat fundamental_mat = cv::findFundamentalMat(points_1, points_2, cv::FM_8POINT);
+          
+          cv::Mat R1, R2, t;
+          DecomposeE(fundamental_mat, R1, R2, t);
+          cv::Mat t1 = t;
+          cv::Mat t2 = -t;
+
+
+          // FindRT()
+        }
+
         /***
         cv::Mat img_w_matches;
         cv::drawMatches(image_data_.at(i).GetImage(), image_keypoints_.at(i),
@@ -512,6 +548,47 @@ class Frontend {
   }
 
  private: 
+
+  // from ORB SLAM
+  void DecomposeE(const cv::Mat &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t) {
+    cv::Mat u,w,vt;
+    cv::SVD::compute(E, w, u, vt);
+
+    u.col(2).copyTo(t);
+    
+    t = t/cv::norm(t);
+
+    cv::Mat W(3, 3, CV_64F, cv::Scalar(0));
+    W.at<float>(0,1) = -1;
+    W.at<float>(1,0) =  1;
+    W.at<float>(2,2) =  1;
+
+    R1 = u * W * vt;
+    if(cv::determinant(R1) < 0)
+      R1 = -R1;
+
+    R2 = u * W.t() * vt;
+    if(cv::determinant(R2) < 0)
+      R2 = -R2;
+  }
+
+  void Triangulate(const cv::Keypoint &kp1, const cv::KeyPoint &kp2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D) {
+    cv::Mat A(4,4,CV_64F);
+
+    A.row(0) = kp1.pt.x * P1.row(2) - P1.row(0);
+    A.row(1) = kp1.pt.y * P1.row(2) - P1.row(1);
+    A.row(2) = kp2.pt.x * P2.row(2) - P2.row(0);
+    A.row(3) = kp2.pt.y * P2.row(2) - P2.row(1);
+
+    cv::Mat u,w,vt;
+    cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A| cv::SVD::FULL_UV);
+    x3D = vt.row(3).t();
+    x3D = x3D.rowRange(0,3) / x3D.at<float>(3);
+
+  }
+
+
+
   std::string time_window_begin_;
   std::string time_window_end_;
   size_t downsample_rate_;
