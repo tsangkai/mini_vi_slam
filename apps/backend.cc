@@ -16,6 +16,7 @@
 #include "so3.h"
 #include "vec_3d_parameter_block.h"
 #include "quat_parameter_block.h"
+#include "imu_data.h"
 #include "imu_error.h"
 #include "pre_int_imu_error.h"
 #include "reprojection_error.h"
@@ -24,116 +25,9 @@
 // TODO: move this term to somewhere else
 Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);      
 
-// TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
   return std::stod(time_str)*1e-9;
 }
-
-
-
-struct IMUData {
- EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-  IMUData(std::string imu_data_str) {
-    std::stringstream str_stream(imu_data_str);          // Create a stringstream of the current line
-
-    if (str_stream.good()) {
-        
-      std::string data_str;
-      std::getline(str_stream, data_str, ',');           // get first string delimited by comma
-      timestamp_ = ConverStrTime(data_str);
-
-      for (int i=0; i<3; ++i) {                          // gyrometer measurement
-        std::getline(str_stream, data_str, ','); 
-        gyr_(i) = std::stod(data_str);
-      }
-
-      for (int i=0; i<3; ++i) {                    
-        std::getline(str_stream, data_str, ',');         // accelerometer measurement 
-        acc_(i) = std::stod(data_str);
-      }
-    }
-  }
-
-  double timestamp_;
-  Eigen::Vector3d gyr_;
-  Eigen::Vector3d acc_; 
-};
-
-struct PreIntIMUData {
- EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-  PreIntIMUData(Eigen::Vector3d bias_gyr,
-                Eigen::Vector3d bias_acc,
-                double sigma_g_c, 
-                double sigma_a_c) {
-
-    bias_gyr_ = bias_gyr;
-    bias_acc_ = bias_acc;
-
-    sigma_g_c_ = sigma_g_c;
-    sigma_a_c_ = sigma_a_c;
-
-    dt_ = 0;
-
-    dR_ = Eigen::Matrix3d::Identity();
-    dv_ = Eigen::Vector3d(0, 0, 0);
-    dp_ = Eigen::Vector3d(0, 0, 0);
-
-    cov_.setZero();
-  }
-  
-  // the imu_data is measured at imu_data.dt_
-  // and this imu_data lasts for imu_dt
-  // assume this imu_data is constant over the interval
-  bool IntegrateSingleIMU(IMUData imu_data, double imu_dt) {
-
-    Eigen::Vector3d gyr = imu_data.gyr_ - bias_gyr_;
-    Eigen::Vector3d acc = imu_data.acc_ - bias_acc_;
-
-
-
-    // covariance update
-    Eigen::Matrix<double, 9, 9> F = Eigen::Matrix<double, 9, 9>::Identity();
-    F.block<3,3>(3,0) = (-1) * dR_ * Hat(acc) * imu_dt;
-    F.block<3,3>(6,0) = (-0.5) * dR_ * Hat(acc)*imu_dt*imu_dt;
-    F.block<3,3>(6,3) = imu_dt * Eigen::Matrix3d::Identity();
-
-    Eigen::Matrix<double, 9, 6> G;
-    G.setZero();
-    G.block<3,3>(0,0) = dR_.transpose()*LeftJacobian(gyr*imu_dt)*imu_dt;
-    G.block<3,3>(3,3) = dR_.transpose()*imu_dt;
-    G.block<3,3>(6,3) = 0.5*dR_.transpose()*imu_dt*imu_dt;
-
-    Eigen::Matrix<double, 6, 6> Q = Eigen::Matrix<double, 6, 6>::Identity();
-    Q.block<3,3>(0,0) = (sigma_g_c_ * sigma_g_c_ / imu_dt) * Eigen::Matrix3d::Identity();
-    Q.block<3,3>(3,3) = (sigma_a_c_ * sigma_a_c_ / imu_dt) * Eigen::Matrix3d::Identity();
-
-    cov_ = F * cov_ * F.transpose() + G * Q * G.transpose();
-
-    // deviation update
-    dp_ = dp_ + imu_dt * dv_ + 0.5 * (imu_dt * imu_dt) * dR_ * acc;
-    dv_ = dv_ + imu_dt * dR_ * acc;
-    dR_ = dR_ * Exp(imu_dt * gyr);
-
-    dt_ = dt_ + imu_dt;
-
-    return true;
-  }
-
-  Eigen::Vector3d bias_gyr_;
-  Eigen::Vector3d bias_acc_;
-
-  double sigma_g_c_;
-  double sigma_a_c_;
-
-  double dt_;
-  Eigen::Matrix3d dR_;  
-  Eigen::Vector3d dv_;
-  Eigen::Vector3d dp_; 
-
-  Eigen::Matrix<double, 9, 9> cov_;
-};
 
 struct ObservationData {
  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -282,7 +176,7 @@ Eigen::Vector3d EpipolarInitialize(Eigen::Vector2d kp1, Eigen::Quaterniond q1, E
   Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeFullU | Eigen::ComputeFullV);
   Eigen::Vector4d vec = svd.matrixV().col(3);
 
-  return vec.head(3) / vec(3) + 0.5*Eigen::Vector3d::Random();
+  return vec.head(3) / vec(3);
 }
 
 
@@ -314,8 +208,8 @@ class ExpLandmarkOptSLAM {
 
     imu_dt_ = 1.0 / (double) experiment_config_file["imu_params"]["imu_rate"]; 
 
+    // camera extrinsic
     cv::FileNode T_BC_node = experiment_config_file["cameras"][0]["T_SC"];            // from camera frame to body frame
-
     T_bc_  <<  T_BC_node[0],  T_BC_node[1],  T_BC_node[2],  T_BC_node[3], 
                T_BC_node[4],  T_BC_node[5],  T_BC_node[6],  T_BC_node[7], 
                T_BC_node[8],  T_BC_node[9], T_BC_node[10], T_BC_node[11], 
@@ -583,7 +477,31 @@ class ExpLandmarkOptSLAM {
     std::string imu_data_str;
     while (std::getline(input_file, imu_data_str)) {
 
-      IMUData imu_data(imu_data_str);
+
+      double timestamp;
+      Eigen::Vector3d gyr;
+      Eigen::Vector3d acc;
+
+      std::stringstream imu_str_stream(imu_data_str); 
+
+      if (imu_str_stream.good()) {
+        std::string data_str;
+        std::getline(imu_str_stream, data_str, ','); 
+        timestamp = ConverStrTime(data_str);
+
+        for (int i=0; i<3; ++i) { 
+          std::getline(imu_str_stream, data_str, ','); 
+          gyr(i) = std::stod(data_str);
+        }
+
+        for (int i=0; i<3; ++i) {                    
+          std::getline(imu_str_stream, data_str, ','); 
+          acc(i) = std::stod(data_str);
+        }
+      }
+
+      IMUData imu_data(timestamp, gyr, acc);
+
 
       if (time_begin_ <= imu_data.timestamp_ && imu_data.timestamp_ <= time_end_) {
 
@@ -644,77 +562,6 @@ class ExpLandmarkOptSLAM {
 
     input_file.close();
     std::cout << "Finished reading IMU data." << std::endl;
-    return true;
-  }
-
-
-  bool InitializeState() {
-        std::cout << "Read observation data at " << "epi_init.csv" << std::endl;
-
-    std::ifstream input_file("epi_init.csv");
-
-    if(!input_file.is_open())
-      throw std::runtime_error("Could not open file");
-
-    // timestamp [ns], R, t
-    std::string first_line_data_str;
-    std::getline(input_file, first_line_data_str);
-    std::getline(input_file, first_line_data_str);
-
-    // TODO: better idx management
-    size_t idx = 2;
-
-    std::string init_data_str;
-    while (std::getline(input_file, init_data_str)) {
-
-
-      std::stringstream str_stream(init_data_str);          // Create a stringstream of the current line
-
-      if (str_stream.good()) {
-        
-        std::string data_str;
-        std::getline(str_stream, data_str, ',');   // get first string delimited by comma
-        double timestamp = ConverStrTime(data_str);
-
-        if (timestamp != state_parameter_.at(idx)->GetTimestamp())
-          std::cout << "timestamp misaligned!" << std::endl;
-
-        Eigen::Matrix3d R;
-        Eigen::Vector3d t;
-        
-        for (size_t i=0; i<3; ++i) {      
-          for (size_t j=0; j<3; ++j) {                 
-            std::getline(str_stream, data_str, ','); 
-            R(i,j) = std::stod(data_str);
-          }
-        }
-
-
-        for (size_t i=0; i<3; ++i) {                    
-          std::getline(str_stream, data_str, ','); 
-          t(i) = std::stod(data_str);
-        }
-
-        // state_parameter_.at(idx)->GetRotationBlock()->setEstimate(position_dr);
-
-        Eigen::Vector3d d_position = state_parameter_.at(idx)->GetPositionBlock()->estimate() - R * state_parameter_.at(idx-1)->GetPositionBlock()->estimate(); 
-        std::cout << d_position << std::endl;
-
-        std::cout << t << std::endl;
-
-
-        std::cout << "==================="<< std::endl;
-        std::cin.get();
-
-      }
-
-      idx++;
-    }
-
-
-
-    input_file.close();
-    std::cout << "Finished initializing states." << std::endl;
     return true;
   }
 
@@ -884,19 +731,23 @@ int main(int argc, char **argv) {
   std::string ground_truth_file_path = euroc_dataset_path + "state_groundtruth_estimate0/data.csv";
   slam_problem.ReadInitialCondition(ground_truth_file_path);
 
+  // states are constructed here
   std::string observation_file_path = "feature_observation.csv";
   slam_problem.ReadObservationData(observation_file_path);
 
+  // output ground truth data (for comparison)
   slam_problem.ProcessGroundTruth(ground_truth_file_path);
 
+  // setup IMU constraints
   std::string imu_file_path = euroc_dataset_path + "imu0/data.csv";
   slam_problem.ReadIMUData(imu_file_path);
 
-  // slam_problem.InitializeState();
-
-  slam_problem.OutputOptimizationResult("trajectory_dr.csv");
-
+  // initiate landmark estimate
   slam_problem.Triangulate();
+
+
+  // the result before optimization (for comparison)
+  slam_problem.OutputOptimizationResult("trajectory_dr.csv");
 
   slam_problem.SolveOptimizationProblem();
   slam_problem.OutputOptimizationResult("trajectory.csv");

@@ -18,9 +18,6 @@
 #include "so3.h"
 
 
-
-
-
 /// \brief Implements a nonlinear IMU factor.
 class PreIntImuError :
     public ceres::SizedCostFunction<9,     // number of residuals

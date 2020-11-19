@@ -37,7 +37,6 @@ class ReprojectionError:
   /// \brief Default constructor.
   ReprojectionError();
 
-  // TODO(tsangkai): set camera intrinsic as static class member
   ReprojectionError(const measurement_t & measurement, 
                     Eigen::Matrix4d T_bc,
                     const Eigen::Matrix2d & covariance = Eigen::Matrix2d::Identity()) {
