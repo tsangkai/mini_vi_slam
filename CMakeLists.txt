@@ -4,8 +4,12 @@ project(mini_vi_slam)
 option(BUILD_TEST "build test programs" OFF)
 
 find_package(Boost COMPONENTS filesystem system REQUIRED)
+
 find_package(OpenCV REQUIRED)
+message("-- OpenCV version: ${OpenCV_VERSION}")
+
 find_package(Eigen3 REQUIRED)
+
 find_package(Ceres REQUIRED)
 
 add_subdirectory(apps)

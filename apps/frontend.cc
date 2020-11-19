@@ -16,6 +16,8 @@
 #include <opencv2/features2d.hpp>
 #include <opencv2/calib3d.hpp>
 
+
+
 class Camera {
 
  public:
@@ -32,6 +34,31 @@ class Camera {
     p1_ = dis_para_2;
     p2_ = dis_para_3;
   }
+
+  cv::Mat K() {
+    
+    cv::Mat ret_K(3, 3, CV_64F, cv::Scalar(0));
+    
+    ret_K.at<double>(0,0) = fu_;
+    ret_K.at<double>(1,1) = fv_;
+    ret_K.at<double>(0,2) = pu_;
+    ret_K.at<double>(1,2) = pv_;
+    ret_K.at<double>(2,2) = 1;
+
+    return ret_K;
+  }
+
+  cv::Mat GetDistortionCoeff() {
+    cv::Mat distortion_coeff(4, 1, CV_64F, cv::Scalar(0));
+
+    distortion_coeff.at<double>(0) = k1_;
+    distortion_coeff.at<double>(1) = k2_;
+    distortion_coeff.at<double>(2) = p1_;
+    distortion_coeff.at<double>(3) = p2_;
+
+    return distortion_coeff;
+  }
+
 
   Eigen::Vector2d ScaleAndShift(Eigen::Vector2d point) {
     Eigen::Vector2d return_point;
@@ -340,6 +367,11 @@ class Frontend {
       }
     }
 
+    std::ofstream output_file;
+    std::string output_file_str("epi_init.csv");
+    output_file.open(output_file_str);
+    output_file << "timestamp [ns], R, t\n";
+    output_file << image_data_.at(0).GetTimestamp() << std::endl;
 
     // call opencv matcher
     for (size_t i=0; i<num_of_images; i++) {
@@ -365,30 +397,82 @@ class Frontend {
           }
         }  
 
+    
+
+        
         // TEST: initialization from 8-point algorithm
         if (j == i+1) {
           std::cout << "matches between " << i << " and " << j << " = " << image_keypoint_matches.size() << std::endl;
 
           size_t point_count = image_keypoint_matches.size();
-          std::vector<cv::Point2f> points_1(point_count);
-          std::vector<cv::Point2f> points_2(point_count);
+          std::vector<cv::Point2d> points_1(point_count);
+          std::vector<cv::Point2d> points_2(point_count);
 
           for (size_t k=0; k<point_count; ++k) {
-            points_1[k] = camera_ptr->UnScaleAndShift(image_keypoints_.at(i)[image_keypoint_matches[k].queryIdx].pt);
-            points_2[k] = camera_ptr->UnScaleAndShift(image_keypoints_.at(j)[image_keypoint_matches[k].trainIdx].pt);
+            cv::Mat_<cv::Point2d> distorted_points(1,2);
+            distorted_points(0) = image_keypoints_.at(i)[image_keypoint_matches[k].queryIdx].pt;
+            distorted_points(1) = image_keypoints_.at(j)[image_keypoint_matches[k].trainIdx].pt;
+
+            cv::Mat un_distorted_points;
+
+            cv::undistortPoints(distorted_points, un_distorted_points, camera_ptr->K(), camera_ptr->GetDistortionCoeff(), cv::noArray(), cv::noArray());
+
+            points_1[k].x = un_distorted_points.at<double>(0,0);
+            points_1[k].y = un_distorted_points.at<double>(0,1);
+            points_2[k].x = un_distorted_points.at<double>(1,0);
+            points_2[k].y = un_distorted_points.at<double>(1,1);
+
           }
 
-          // cv::Mat fundamental_mat = cv::findFundamentalMat(points_1, points_2, cv::FM_RANSAC, 3, 0.99);
-          cv::Mat fundamental_mat = cv::findFundamentalMat(points_1, points_2, cv::FM_8POINT);
-          
+          cv::Mat essential_mat = cv::findEssentialMat(points_1, points_2, cv::Mat::eye(3,3, CV_64F), cv::RANSAC, 0.99, 0.9);
+
+
           cv::Mat R1, R2, t;
-          DecomposeE(fundamental_mat, R1, R2, t);
+          DecomposeE(essential_mat, R1, R2, t);
           cv::Mat t1 = t;
           cv::Mat t2 = -t;
 
+          int nGood1 = CheckRT(R1, t1, points_1, points_2);
+          int nGood2 = CheckRT(R1, t2, points_1, points_2);
+          int nGood3 = CheckRT(R2, t1, points_1, points_2);
+          int nGood4 = CheckRT(R2, t2, points_1, points_2);
 
-          // FindRT()
+          std::cout << nGood1 << "\t" << nGood2 << "\t" << nGood3 << "\t" << nGood4 << "\t" << std::endl;
+
+          int max_nGood = std::max(nGood1, std::max(nGood2, std::max(nGood3, nGood4)));
+
+          cv::Mat min_R, min_t;
+          if(nGood1 == max_nGood) {
+            min_R = R1;
+            min_t = t1;
+          }
+          else if (nGood2 == max_nGood) {
+            min_R = R1;
+            min_t = t2;
+          }
+          else if (nGood3 == max_nGood) {
+            min_R = R2;
+            min_t = t1;
+          }
+          else {
+            min_R = R2;
+            min_t = t2;
+          }
+
+          // std::cout << min_R << std::endl;
+          // std::cout << min_t << std::endl;
+
+
+          output_file << image_data_.at(j).GetTimestamp() << ",";
+          output_file << min_R.at<double>(0,0) << "," << min_R.at<double>(0,1) << "," << min_R.at<double>(0,2) << ","
+                      << min_R.at<double>(1,0) << "," << min_R.at<double>(1,1) << "," << min_R.at<double>(1,2) << ","
+                      << min_R.at<double>(2,0) << "," << min_R.at<double>(2,1) << "," << min_R.at<double>(2,2) << ",";
+          
+          output_file << min_t.at<double>(0) << "," << min_t.at<double>(1) << "," << min_t.at<double>(2) << "\n";
+
+
         }
+
 
         /***
         cv::Mat img_w_matches;
@@ -404,6 +488,8 @@ class Frontend {
         ***/
       }
     }
+    
+    output_file.close();
 
 
     // assign landmark id to each matched features
@@ -548,7 +634,128 @@ class Frontend {
   }
 
  private: 
+int CheckRT(const cv::Mat &R, const cv::Mat &t, 
+                                   const std::vector<cv::Point2d> &vKeys1, 
+                                   const std::vector<cv::Point2d> &vKeys2)
+{
+    double parallax;
+    double th2 = 4.0;
 
+    // Calibration parameters
+    // const float fx = K.at<float>(0,0);
+    // const float fy = K.at<float>(1,1);
+    // const float cx = K.at<float>(0,2);
+    // const float cy = K.at<float>(1,2);
+
+    // vbGood = vector<bool>(vKeys1.size(),false);
+    std::vector<cv::Point3d> vP3D;
+    vP3D.resize(vKeys1.size());
+
+    std::vector<double> vCosParallax;
+    vCosParallax.reserve(vKeys1.size());
+
+    // Camera 1 Projection Matrix K[I|0]
+    cv::Mat P1(3,4,CV_64F,cv::Scalar(0));
+    // K.copyTo(P1.rowRange(0,3).colRange(0,3));
+
+    cv::Mat O1 = cv::Mat::zeros(3,1,CV_64F);
+
+    // Camera 2 Projection Matrix K[R|t]
+    cv::Mat P2(3,4,CV_64F);
+    R.copyTo(P2.rowRange(0,3).colRange(0,3));
+    t.copyTo(P2.rowRange(0,3).col(3));
+    // P2 = K*P2;
+
+    cv::Mat O2 = -R.t()*t;
+
+    int nGood=0;
+
+    for(size_t i=0, iend=vKeys1.size();i<iend;i++)
+    {
+
+      const cv::Point2d &kp1 = vKeys1[i];
+      const cv::Point2d &kp2 = vKeys2[i];
+
+        // const cv::KeyPoint &kp1 = vKeys1[vMatches12[i].first];
+        // const cv::KeyPoint &kp2 = vKeys2[vMatches12[i].second];
+        cv::Mat p3dC1;
+
+        Triangulate(kp1,kp2,P1,P2,p3dC1);
+
+        if(!isfinite(p3dC1.at<double>(0)) || !isfinite(p3dC1.at<double>(1)) || !isfinite(p3dC1.at<double>(2)))
+        {
+            std::cout << "infinite number" << std::endl;
+            //vbGood[vMatches12[i].first]=false;
+            continue;
+        }
+
+        // Check parallax
+        cv::Mat normal1 = p3dC1 - O1;
+        double dist1 = cv::norm(normal1);
+
+        cv::Mat normal2 = p3dC1 - O2;
+        double dist2 = cv::norm(normal2);
+
+        double cosParallax = normal1.dot(normal2)/(dist1*dist2);
+
+        // Check depth in front of first camera (only if enough parallax, as "infinite" points can easily go to negative depth)
+        if(p3dC1.at<double>(2)<=0 && cosParallax<0.99998) {
+          continue;
+
+        }
+
+        // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to negative depth)
+        cv::Mat p3dC2 = R*p3dC1+t;
+
+        if(p3dC2.at<double>(2)<=0 && cosParallax<0.99998) {
+          continue;
+
+        }
+
+        // Check reprojection error in first image
+        double im1x, im1y;
+        double invZ1 = 1.0/p3dC1.at<double>(2);
+        im1x = p3dC1.at<double>(0)*invZ1;
+        im1y = p3dC1.at<double>(1)*invZ1;
+
+        double squareError1 = (im1x-kp1.x)*(im1x-kp1.x)+(im1y-kp1.y)*(im1y-kp1.y);
+
+        if(squareError1>th2)
+            continue;
+
+        // Check reprojection error in second image
+        double im2x, im2y;
+        double invZ2 = 1.0/p3dC2.at<double>(2);
+        im2x = p3dC2.at<double>(0)*invZ2;
+        im2y = p3dC2.at<double>(1)*invZ2;
+
+        double squareError2 = (im2x-kp2.x)*(im2x-kp2.x)+(im2y-kp2.y)*(im2y-kp2.y);
+
+        if(squareError2>th2)
+            continue;
+
+        vCosParallax.push_back(cosParallax);
+        // vP3D[vMatches12[i].first] = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
+        nGood++;
+
+        //if(cosParallax<0.99998)
+        //    vbGood[vMatches12[i].first]=true;
+    }
+
+    if(nGood>0)
+    {
+        sort(vCosParallax.begin(),vCosParallax.end());
+
+        size_t idx = std::min(50,int(vCosParallax.size()-1));
+        parallax = acos(vCosParallax[idx])*180/CV_PI;
+    }
+    else
+        parallax=0;
+
+    return nGood;
+}
+ 
+ 
   // from ORB SLAM
   void DecomposeE(const cv::Mat &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t) {
     cv::Mat u,w,vt;
@@ -559,9 +766,9 @@ class Frontend {
     t = t/cv::norm(t);
 
     cv::Mat W(3, 3, CV_64F, cv::Scalar(0));
-    W.at<float>(0,1) = -1;
-    W.at<float>(1,0) =  1;
-    W.at<float>(2,2) =  1;
+    W.at<double>(0,1) = -1;
+    W.at<double>(1,0) =  1;
+    W.at<double>(2,2) =  1;
 
     R1 = u * W * vt;
     if(cv::determinant(R1) < 0)
@@ -572,18 +779,18 @@ class Frontend {
       R2 = -R2;
   }
 
-  void Triangulate(const cv::Keypoint &kp1, const cv::KeyPoint &kp2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D) {
+  void Triangulate(const cv::Point2d &kp1, const cv::Point2d &kp2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D) {
     cv::Mat A(4,4,CV_64F);
 
-    A.row(0) = kp1.pt.x * P1.row(2) - P1.row(0);
-    A.row(1) = kp1.pt.y * P1.row(2) - P1.row(1);
-    A.row(2) = kp2.pt.x * P2.row(2) - P2.row(0);
-    A.row(3) = kp2.pt.y * P2.row(2) - P2.row(1);
+    A.row(0) = kp1.x * P1.row(2) - P1.row(0);
+    A.row(1) = kp1.y * P1.row(2) - P1.row(1);
+    A.row(2) = kp2.x * P2.row(2) - P2.row(0);
+    A.row(3) = kp2.y * P2.row(2) - P2.row(1);
 
     cv::Mat u,w,vt;
     cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A| cv::SVD::FULL_UV);
     x3D = vt.row(3).t();
-    x3D = x3D.rowRange(0,3) / x3D.at<float>(3);
+    x3D = x3D.rowRange(0,3) / x3D.at<double>(3);
 
   }
 
