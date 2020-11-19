@@ -7,9 +7,6 @@
 
 #include <boost/filesystem.hpp>
 
-#include <Eigen/Core>
-#include <Eigen/LU>
-
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui.hpp>
@@ -59,106 +56,6 @@ class Camera {
     return distortion_coeff;
   }
 
-
-  Eigen::Vector2d ScaleAndShift(Eigen::Vector2d point) {
-    Eigen::Vector2d return_point;
-
-    return_point[0] = fu_ * point[0] + pu_;
-    return_point[1] = fv_ * point[1] + pv_;
-
-    return return_point;
-  }
-
-  Eigen::Vector2d UnScaleAndShift(Eigen::Vector2d point) {
-    Eigen::Vector2d return_point;
-
-    return_point[0] = (point[0] - pu_) / fu_;
-    return_point[1] = (point[1] - pv_) / fv_;
-
-    return return_point;
-  }
-
-
-  cv::Point2f UnScaleAndShift(cv::Point2f point) {
-    cv::Point2f return_point;
-
-    return_point.x = (point.x - pu_) / fu_;
-    return_point.y = (point.y - pv_) / fv_;
-
-    return return_point;
-  }
-
-
-  bool Distort(const Eigen::Vector2d & pointUndistorted, Eigen::Vector2d * pointDistorted,
-    Eigen::Matrix2d * pointJacobian) const {
-
-    // first compute the distorted point
-    const double u0 = pointUndistorted[0];
-    const double u1 = pointUndistorted[1];
-    const double mx_u = u0 * u0;
-    const double my_u = u1 * u1;
-    const double mxy_u = u0 * u1;
-    const double rho_u = mx_u + my_u;
-    const double rad_dist_u = k1_ * rho_u + k2_ * rho_u * rho_u;
-    (*pointDistorted)[0] = u0 + u0 * rad_dist_u + 2.0 * p1_ * mxy_u
-      + p2_ * (rho_u + 2.0 * mx_u);
-    (*pointDistorted)[1] = u1 + u1 * rad_dist_u + 2.0 * p2_ * mxy_u
-      + p1_ * (rho_u + 2.0 * my_u);
-
-    // next the Jacobian w.r.t. changes on the undistorted point
-    Eigen::Matrix2d & J = *pointJacobian;
-    J(0, 0) = 1 + rad_dist_u + k1_ * 2.0 * mx_u + k2_ * rho_u * 4 * mx_u
-      + 2.0 * p1_ * u1 + 6 * p2_ * u0;
-    J(1, 0) = k1_ * 2.0 * u0 * u1 + k2_ * 4 * rho_u * u0 * u1 + p1_ * 2.0 * u0
-      + 2.0 * p2_ * u1;
-    J(0, 1) = J(1, 0);
-    J(1, 1) = 1 + rad_dist_u + k1_ * 2.0 * my_u + k2_ * rho_u * 4 * my_u
-      + 6 * p1_ * u1 + 2.0 * p2_ * u0;
-
-
-    return true;
-  
-  }
-
-  bool UnDistort(const Eigen::Vector2d & pointDistorted,
-                     Eigen::Vector2d * pointUndistorted) const {
-
-    // this is expensive: we solve with Gauss-Newton...
-    Eigen::Vector2d x_bar = pointDistorted; // initialise at distorted point
-    const int n = 15;  // just 5 iterations max.
-    Eigen::Matrix2d E;  // error Jacobian
-
-    bool success = false;
-    for (int i = 0; i < n; i++) {
-
-      Eigen::Vector2d x_tmp;
-
-      Distort(x_bar, &x_tmp, &E);
-
-      Eigen::Vector2d e(pointDistorted - x_tmp);
-      Eigen::Matrix2d E2 = (E.transpose() * E);
-      Eigen::Vector2d du = E2.inverse() * E.transpose() * e;
-
-      x_bar += du;
-
-      const double chi2 = e.dot(e);
-      if (chi2 < 1e-4) {
-        success = true;
-      }
-      if (chi2 < 1e-15) {
-        success = true;
-        break;
-      }
-
-    }
-    *pointUndistorted = x_bar;
-
-    if(!success){
-      std::cout<<(E.transpose() * E)<<std::endl;
-    }
-
-    return success;
-  }
 
  private:
   double fu_;
@@ -396,9 +293,10 @@ class Frontend {
             landmark_id_table_.at(j).at(train_idx)->AddNeighbor(landmark_id_table_.at(i).at(query_idx));
           }
         }  
-
+      }
+    }
     
-
+        /*
         
         // TEST: initialization from 8-point algorithm
         if (j == i+1) {
@@ -474,7 +372,7 @@ class Frontend {
         }
 
 
-        /***
+        / ***
         cv::Mat img_w_matches;
         cv::drawMatches(image_data_.at(i).GetImage(), image_keypoints_.at(i),
                       image_data_.at(j).GetImage(), image_keypoints_.at(j),
@@ -485,12 +383,12 @@ class Frontend {
 
         cv::imwrite("extraction.jpg", img_w_keypoints);
 
-        ***/
+        *** /
       }
     }
     
     output_file.close();
-
+    */
 
     // assign landmark id to each matched features
     size_t landmark_count = 0;
@@ -596,31 +494,17 @@ class Frontend {
 
         if (landmark_id_table_.at(i).at(k)->GetLandmarkId()!=0) {
 
-          // 
-
-          Eigen::Vector2d distorted_point(image_keypoints_.at(i).at(k).pt.x, image_keypoints_.at(i).at(k).pt.y);
-          Eigen::Vector2d undistorted_point;
-          camera_ptr->UnDistort(camera_ptr->UnScaleAndShift(distorted_point), &undistorted_point);
-          Eigen::Vector2d corrected_point = camera_ptr->ScaleAndShift(undistorted_point);
-
-          // std::cout << distorted_point << std::endl;
-          // std::cout << corrected_point << std::endl << std::endl;
-
-          // 
-
-
-          /***
-          std::string output_str = image_data_.at(i).GetTimestamp() + "," 
-                                   + std::to_string(landmark_id_table_.at(i).at(k)->GetLandmarkId()) + ","
-                                   + std::to_string(image_keypoints_.at(i).at(k).pt.x) + ","
-                                   + std::to_string(image_keypoints_.at(i).at(k).pt.y) + ","
-                                   + std::to_string(image_keypoints_.at(i).at(k).size) + "\n";
-          ***/
+          // TODO: may clean up the syntax a little bit
+          cv::Mat_<cv::Point2d> distorted_points(1,1);
+          distorted_points(0) = image_keypoints_.at(i).at(k).pt;
+          cv::Mat un_distorted_points;
+          cv::undistortPoints(distorted_points, un_distorted_points, camera_ptr->K(), camera_ptr->GetDistortionCoeff(), cv::noArray(), cv::noArray());
+        
 
           std::string output_str = image_data_.at(i).GetTimestamp() + "," 
                                    + std::to_string(landmark_id_table_.at(i).at(k)->GetLandmarkId()) + ","
-                                   + std::to_string(corrected_point[0]) + ","
-                                   + std::to_string(corrected_point[1]) + ","
+                                   + std::to_string(un_distorted_points.at<double>(0)) + ","
+                                   + std::to_string(un_distorted_points.at<double>(1)) + ","
                                    + std::to_string(image_keypoints_.at(i).at(k).size) + "\n";
 
           output_file << output_str;

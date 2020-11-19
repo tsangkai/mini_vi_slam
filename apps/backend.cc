@@ -9,7 +9,7 @@
 
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
-#include <opencv2/core/core.hpp>
+#include <opencv2/core/core.hpp>    // for config file reading
 #include <Eigen/Core>
 
 
@@ -26,10 +26,7 @@ Eigen::Vector3d gravity = Eigen::Vector3d(0, 0, -9.81007);
 
 // TODO: avoid data conversion
 double ConverStrTime(std::string time_str) {
-  std::string time_str_sec = time_str.substr(7,3);       // second
-  std::string time_str_nano_sec = time_str.substr(10);   // nano-second
-
-  return std::stoi(time_str_sec) + std::stoi(time_str_nano_sec)*1e-9;
+  return std::stod(time_str)*1e-9;
 }
 
 
@@ -227,16 +224,16 @@ struct TriangularData {
   Eigen::Vector2d keypoint_;
 };
 
+// keypoints should be normalized
 Eigen::Vector3d EpipolarInitialize(Eigen::Vector2d kp1, Eigen::Quaterniond q1, Eigen::Vector3d p1_n1,
                                    Eigen::Vector2d kp2, Eigen::Quaterniond q2, Eigen::Vector3d p2_n2,
-                                   Eigen::Matrix4d T_bc, 
-                                   double fu, double fv,
-                                   double cu, double cv) {
-
+                                   Eigen::Matrix4d T_bc) {
+  /***
   Eigen::Matrix3d K;
   K << fu,  0, cu,
         0, fv, cv,
         0,  0,  1;
+  ***/
 
   Eigen::Matrix<double, 3, 4> projection;
   projection << 1, 0, 0, 0,
@@ -267,10 +264,13 @@ Eigen::Vector3d EpipolarInitialize(Eigen::Vector2d kp1, Eigen::Quaterniond q1, E
   T_bn_2.topLeftCorner<3,3>() = R_bn_2;
   T_bn_2.topRightCorner<3,1>() = -R_bn_2 * p2_n2;
 
+  // 
+  // Eigen::Matrix<double, 3, 4> P1 = K * projection * T_cb * T_bn_1;
+  // Eigen::Matrix<double, 3, 4> P2 = K * projection * T_cb * T_bn_2;
 
   // 
-  Eigen::Matrix<double, 3, 4> P1 = K * projection * T_cb * T_bn_1;
-  Eigen::Matrix<double, 3, 4> P2 = K * projection * T_cb * T_bn_2;
+  Eigen::Matrix<double, 3, 4> P1 = projection * T_cb * T_bn_1;
+  Eigen::Matrix<double, 3, 4> P2 = projection * T_cb * T_bn_2;
 
   //
   Eigen::Matrix4d A;
@@ -320,12 +320,6 @@ class ExpLandmarkOptSLAM {
                T_BC_node[4],  T_BC_node[5],  T_BC_node[6],  T_BC_node[7], 
                T_BC_node[8],  T_BC_node[9], T_BC_node[10], T_BC_node[11], 
               T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
-
-    fu_ = experiment_config_file["cameras"][0]["focal_length"][0];
-    fv_ = experiment_config_file["cameras"][0]["focal_length"][1];
-
-    cu_ = experiment_config_file["cameras"][0]["principal_point"][0];
-    cv_ = experiment_config_file["cameras"][0]["principal_point"][1];
 
     sigma_g_c_ = experiment_config_file["imu_params"]["sigma_g_c"];
     sigma_a_c_ = experiment_config_file["imu_params"]["sigma_a_c"];    
@@ -653,11 +647,83 @@ class ExpLandmarkOptSLAM {
     return true;
   }
 
+
+  bool InitializeState() {
+        std::cout << "Read observation data at " << "epi_init.csv" << std::endl;
+
+    std::ifstream input_file("epi_init.csv");
+
+    if(!input_file.is_open())
+      throw std::runtime_error("Could not open file");
+
+    // timestamp [ns], R, t
+    std::string first_line_data_str;
+    std::getline(input_file, first_line_data_str);
+    std::getline(input_file, first_line_data_str);
+
+    // TODO: better idx management
+    size_t idx = 2;
+
+    std::string init_data_str;
+    while (std::getline(input_file, init_data_str)) {
+
+
+      std::stringstream str_stream(init_data_str);          // Create a stringstream of the current line
+
+      if (str_stream.good()) {
+        
+        std::string data_str;
+        std::getline(str_stream, data_str, ',');   // get first string delimited by comma
+        double timestamp = ConverStrTime(data_str);
+
+        if (timestamp != state_parameter_.at(idx)->GetTimestamp())
+          std::cout << "timestamp misaligned!" << std::endl;
+
+        Eigen::Matrix3d R;
+        Eigen::Vector3d t;
+        
+        for (size_t i=0; i<3; ++i) {      
+          for (size_t j=0; j<3; ++j) {                 
+            std::getline(str_stream, data_str, ','); 
+            R(i,j) = std::stod(data_str);
+          }
+        }
+
+
+        for (size_t i=0; i<3; ++i) {                    
+          std::getline(str_stream, data_str, ','); 
+          t(i) = std::stod(data_str);
+        }
+
+        // state_parameter_.at(idx)->GetRotationBlock()->setEstimate(position_dr);
+
+        Eigen::Vector3d d_position = state_parameter_.at(idx)->GetPositionBlock()->estimate() - R * state_parameter_.at(idx-1)->GetPositionBlock()->estimate(); 
+        std::cout << d_position << std::endl;
+
+        std::cout << t << std::endl;
+
+
+        std::cout << "==================="<< std::endl;
+        std::cin.get();
+
+      }
+
+      idx++;
+    }
+
+
+
+    input_file.close();
+    std::cout << "Finished initializing states." << std::endl;
+    return true;
+  }
+
+
   bool Triangulate() {
 
     std::cout << "Begin triangularization to initialize landmark estimates." << std::endl;
 
-    std::vector<std::vector<TriangularData>> tri_data;
+    std::vector<std::vector<TriangularData>> tri_data;         // tri_data[num_of_landmark][2]
     tri_data.resize(observation_data_.size());
 
     for (size_t i=0; i<observation_data_.size(); ++i) {
@@ -687,8 +753,6 @@ class ExpLandmarkOptSLAM {
 
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.feature_pos_,
                                                                  T_bc_,
-                                                                 fu_, fv_,
-                                                                 cu_, cv_,
                                                                  observation_data.cov());
 
       optimization_problem_.AddResidualBlock(cost_function,
@@ -709,9 +773,7 @@ class ExpLandmarkOptSLAM {
 
       Eigen::Vector3d init_landmark_pos = EpipolarInitialize(keypoint_0, state_parameter_.at(state_idx_0)->GetRotationBlock()->estimate(), state_parameter_.at(state_idx_0)->GetPositionBlock()->estimate(),
                                                              keypoint_1, state_parameter_.at(state_idx_1)->GetRotationBlock()->estimate(), state_parameter_.at(state_idx_1)->GetPositionBlock()->estimate(),
-                                                             T_bc_,
-                                                             fu_, fv_,
-                                                             cu_, cv_);
+                                                             T_bc_);
 
       landmark_parameter_.at(i)->setEstimate(init_landmark_pos);
 
@@ -719,6 +781,8 @@ class ExpLandmarkOptSLAM {
 
     return true;
   }
+
+
 
   bool SolveOptimizationProblem() {
 
@@ -786,10 +850,6 @@ class ExpLandmarkOptSLAM {
   double imu_dt_;
 
   Eigen::Matrix4d T_bc_;
-  double fu_;   // focal length u
-  double fv_;
-  double cu_;   // image center u
-  double cv_;   // image center v
 
   // parameter containers
   std::vector<State*>                state_parameter_;
@@ -831,6 +891,9 @@ int main(int argc, char **argv) {
 
   std::string imu_file_path = euroc_dataset_path + "imu0/data.csv";
   slam_problem.ReadIMUData(imu_file_path);
+
+  // slam_problem.InitializeState();
+
   slam_problem.OutputOptimizationResult("trajectory_dr.csv");
 
   slam_problem.Triangulate();
