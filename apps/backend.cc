@@ -215,6 +215,9 @@ class ExpLandmarkOptSLAM {
                T_BC_node[8],  T_BC_node[9], T_BC_node[10], T_BC_node[11], 
               T_BC_node[12], T_BC_node[13], T_BC_node[14], T_BC_node[15];
 
+    fu_ = experiment_config_file["cameras"][0]["focal_length"][0];
+    fv_ = experiment_config_file["cameras"][0]["focal_length"][1];
+
     sigma_g_c_ = experiment_config_file["imu_params"]["sigma_g_c"];
     sigma_a_c_ = experiment_config_file["imu_params"]["sigma_a_c"];    
 
@@ -247,32 +250,36 @@ class ExpLandmarkOptSLAM {
           state_parameter_.push_back(new State(ConverStrTime(time_stamp_str)));
 
           // position
-          std::string initial_position_str[3];
+          std::string temp_str;
+          double initial_p[3];
           for (int i=0; i<3; ++i) {                    
-            std::getline(s_stream, initial_position_str[i], ','); 
+            std::getline(s_stream, temp_str, ',');
+            initial_p[i] = std::stod(temp_str);
           }
 
-          Eigen::Vector3d initial_position(std::stod(initial_position_str[0]), std::stod(initial_position_str[1]), std::stod(initial_position_str[2]));
+          Eigen::Vector3d initial_position(initial_p);
           state_parameter_.at(0)->GetPositionBlock()->setEstimate(initial_position);
           optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetPositionBlock()->parameters(), 3);
 
           // rotation
-          std::string initial_rotation_str[4];
+          double initial_q[4];
           for (int i=0; i<4; ++i) {                    
-            std::getline(s_stream, initial_rotation_str[i], ','); 
+            std::getline(s_stream, temp_str, ',');
+            initial_q[i] = std::stod(temp_str);
           }
 
-          Eigen::Quaterniond initial_rotation(std::stod(initial_rotation_str[0]), std::stod(initial_rotation_str[1]), std::stod(initial_rotation_str[2]), std::stod(initial_rotation_str[3]));
+          Eigen::Quaterniond initial_rotation(initial_q[0], initial_q[1], initial_q[2], initial_q[3]);
           state_parameter_.at(0)->GetRotationBlock()->setEstimate(initial_rotation);
           optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetRotationBlock()->parameters(), 4, quat_parameterization_ptr_);
 
           // velocity
-          std::string initial_velocity_str[3];
+          double initial_v[3];
           for (int i=0; i<3; ++i) {                    
-            std::getline(s_stream, initial_velocity_str[i], ','); 
+            std::getline(s_stream, temp_str, ',');
+            initial_v[i] = std::stod(temp_str);
           }
 
-          Eigen::Vector3d initial_velocity(std::stod(initial_velocity_str[0]), std::stod(initial_velocity_str[1]), std::stod(initial_velocity_str[2]));
+          Eigen::Vector3d initial_velocity(initial_v);
           state_parameter_.at(0)->GetVelocityBlock()->setEstimate(initial_velocity);
           optimization_problem_.AddParameterBlock(state_parameter_.at(0)->GetVelocityBlock()->parameters(), 3);
 
@@ -351,6 +358,7 @@ class ExpLandmarkOptSLAM {
     return true;
   }
 
+
   bool ProcessGroundTruth(std::string ground_truth_file_path) {
 
     std::cout << "Read ground truth data at " << ground_truth_file_path << std::endl;
@@ -388,10 +396,21 @@ class ExpLandmarkOptSLAM {
           else {
             num = num + 1;
 
-            // output 
             std::string data;
             output_file << std::to_string(ground_truth_timestamp);
-            for (int i=0; i<7; ++i) {                    
+
+            // position
+            double gt_p[3];
+            for (int i=0; i<3; ++i) {                    
+              std::getline(s_stream, data, ',');
+
+              output_file << ",";
+              output_file << data;
+              gt_p[i] = std::stod(data);
+            }
+
+            // rotation
+            for (int i=0; i<4; ++i) {                    
               std::getline(s_stream, data, ',');
 
               output_file << ",";
@@ -399,12 +418,25 @@ class ExpLandmarkOptSLAM {
             }
 
             // velocity
+            double gt_v[3];
             for (int i=0; i<3; ++i) {                    
               std::getline(s_stream, data, ',');
 
               output_file << ",";
               output_file << data;
+              gt_v[i] = std::stod(data);
             }
+
+
+            Eigen::Vector3d init_p(gt_p);
+            Eigen::Vector3d init_v(gt_v);
+
+
+            // state_parameter_.at(state_idx+1)->GetVelocityBlock()->setEstimate(init_v + 0.002*Eigen::Vector3d::Random());
+            // state_parameter_.at(state_idx+1)->GetPositionBlock()->setEstimate(init_p + 0.002*Eigen::Vector3d::Random());              
+   
+
+
             
             // gyro bias
             std::string b_gyr[3];
@@ -598,12 +630,14 @@ class ExpLandmarkOptSLAM {
         tri_data.at(landmark_idx).push_back(tri_data_instance);
       }
 
+      double f = 0.5 * (fu_ + fv_);
+      double test_const = 1.0 / (f * f);
       ceres::CostFunction* cost_function = new ReprojectionError(observation_data.feature_pos_,
                                                                  T_bc_,
-                                                                 observation_data.cov());
+                                                                 test_const*observation_data.cov());
 
       optimization_problem_.AddResidualBlock(cost_function,
-                                             loss_function_ptr_,
+                                             NULL,
                                              state_parameter_.at(state_idx)->GetRotationBlock()->parameters(),
                                              state_parameter_.at(state_idx)->GetPositionBlock()->parameters(),
                                              landmark_parameter_.at(landmark_idx)->parameters());
@@ -698,6 +732,9 @@ class ExpLandmarkOptSLAM {
 
   Eigen::Matrix4d T_bc_;
 
+  double fu_;
+  double fv_;
+
   // parameter containers
   std::vector<State*>                state_parameter_;
   std::vector<Vec3dParameterBlock*>  landmark_parameter_;
@@ -728,6 +765,8 @@ int main(int argc, char **argv) {
   ExpLandmarkOptSLAM slam_problem(config_folder_path);
 
   std::string euroc_dataset_path = "../../../dataset/mav0/";
+
+  // initialize the first state
   std::string ground_truth_file_path = euroc_dataset_path + "state_groundtruth_estimate0/data.csv";
   slam_problem.ReadInitialCondition(ground_truth_file_path);
 
